@@ -1,677 +1,1097 @@
-# ReqFlow 设计文档
+# ReqFlow 设计文档 v1.0
 
-> AI-Native 需求澄清工作台 — 从一句话想法到可执行方案
-
----
-
-## 1. 问题与动机
-
-### 1.1 痛点
-
-传统需求澄清流程存在以下问题：
-
-| 角色 | 痛点 |
-|------|------|
-| 独立开发者 | 有想法但不会写 PRD、不会画原型、没有测试思维 |
-| 小团队 | 没有专职产品经理，需求靠口头传达，理解偏差大 |
-| 所有人 | 需求变更大，文档维护成本高，改一次排期两周 |
-
-### 1.2 核心洞察
-
-1. **需求澄清本质上是对话**：好产品经理也是通过追问来明确需求的
-2. **原型比文字更直观**：看到页面才能判断"这是不是我要的"
-3. **迭代是常态**：需求不是一次定死的，而是否定之否定的螺旋过程
-4. **AI 可以扮演缺失角色**：产品经理、架构师、设计师、测试、文档专家
-
-### 1.3 设计目标
-
-- 一个人也能走完需求澄清全流程
-- 从想法到可执行方案，AI 全程辅助
-- 支持迭代循环，修改成本趋近于零
-- 所见即所得，对话即文档
+> AI-Native 需求澄清工作台：把一句话想法稳定收敛成可开发、可验收、可回滚的规格包。
 
 ---
 
-## 2. 核心概念模型
+## 0. 版本说明
 
-### 2.1 双环迭代
+| 项 | 内容 |
+|----|------|
+| 版本 | v1.0 |
+| 核心升级 | 从“对话即文档”升级为“对话驱动的受控自循环” |
+| 关键变化 | 引入需求宪法、变更提案、影响分析、质量闸门、版本快照、冻结体检 |
+| 设计原则 | AI 可以主动推进，但不能绕过确认、验证和回滚机制 |
 
-```
-            ┌──────────────────────────────────┐
-            │          外环：认知迭代            │
-            │                                  │
-            │   想法 → 看到原型 → "不对/差点"    │
-            │         ↑              │         │
-            │         └── 修正想法 ←──┘         │
-            │                                  │
-            │   ┌────────────────────────┐     │
-            │   │    内环：细节迭代        │     │
-            │   │                        │     │
-            │   │  需求 → 方案 → 原型      │     │
-            │   │   ↑              │     │     │
-            │   │   └── 微调细节 ←──┘     │     │
-            │   │                        │     │
-            │   └────────────────────────┘     │
-            │                                  │
-            └──────────────────────────────────┘
-```
-
-**内环**：方向对了，调整细节（加个字段、改个布局）  
-**外环**：方向不对，推翻重来（这不是博客，是社区）
-
-### 2.2 四阶段状态机
-
-```
-                    ┌──────────┐
-          ┌────────►│ CLARIFY  │◄────────┐
-          │         │ 需求澄清  │         │
-          │         └────┬─────┘         │
-          │              │               │
-          │              ▼               │
-          │         ┌──────────┐         │
-          │  ┌──────│ DRAFT    │◄──┐     │
-          │  │      │ 方案草稿  │   │     │
-          │  │      └────┬─────┘   │     │
-          │  │           │         │     │
-          │  │           ▼         │     │
-          │  │      ┌──────────┐   │     │
-          │  │      │ REVIEW   │───┘     │
-          │  │      │ 审阅迭代  │ 微调     │
-          │  │      └────┬─────┘         │
-          │  │           │               │
-          │  │     ┌─────┴─────┐         │
-          │  │     │           │         │
-          │  │   满意        不满意(大改)  │
-          │  │     │           │         │
-          │  │     ▼           └─────────┘
-          │  │  ┌──────────┐     推翻重来
-          │  │  │ FROZEN   │
-          │  │  │ 已冻结    │
-          │  │  └──────────┘
-          │  │
-          │  └── 不满意(小改) → 回到 DRAFT 微调
-          │
-          └── 完全推翻 → 回到 CLARIFY 重新澄清
-```
-
-| 阶段 | 触发条件 | AI 行为 |
-|------|---------|---------|
-| **CLARIFY** | 用户输入想法 | AI 产品经理逐步追问，每轮2-3个具体问题 |
-| **DRAFT** | 需求基本清晰 | AI 生成需求文档、技术方案、验收标准 |
-| **REVIEW** | 用户审阅原型 | AI 根据反馈微调或推翻重来 |
-| **FROZEN** | 用户执行 /freeze | 锁定所有文档，输出最终开发规格 |
-
-### 2.3 对话即文档
-
-核心设计：**AI 的对话回复中嵌入结构化文档标记，解析后自动更新右侧文档面板。**
-
-```
-AI 回复示例：
-─────────────────────
-好的，根据你的回答，我更新了需求文档：
-
-1. 目标读者是技术同行
-2. 支持评论功能
-3. 长文为主
-
-```requirement
-{
-  "productDef": { "description": "技术博客", "targetUsers": "技术同行", "coreValue": "..." },
-  "features": [{ "priority": "P0", "name": "文章管理", ... }],
-  "excluded": ["社交功能"],
-  "rules": ["..."],
-  "pendingQuestions": ["是否需要暗黑模式？"]
-}
-```
-
-你觉得还需要调整吗？
-─────────────────────
-
-前端显示时：
-- 对话区：只显示自然语言部分（文档标记被过滤）
-- 文档区：显示解析后的结构化文档
-```
-
-### 2.4 命令系统
-
-用户通过命令控制迭代方向，无需理解底层状态机：
-
-| 命令 | 迭代类型 | 效果 |
-|------|---------|------|
-| `/review` | 审阅 | AI 总结当前状态，列出已确定项和待确认项 |
-| `/fix <问题>` | 内环微调 | 定点修改，只动相关部分 |
-| `/idea <想法>` | 内环扩展 | AI 评估影响范围，自动更新受影响的文档 |
-| `/reset` | 外环推翻 | 清空所有文档，回到 CLARIFY 重新开始 |
-| `/freeze` | 锁定 | 冻结当前状态，输出最终开发规格 |
-| `/generate-tech` | 按需生成 | 基于当前需求生成技术方案 |
-| `/generate-acceptance` | 按需生成 | 基于当前需求生成验收标准 |
-| `/generate-prototype` | 按需生成 | 基于当前需求生成 HTML 原型 |
+v1.0 的重点不是让 AI 多生成几份文档，而是让整个需求澄清流程具备工程化闭环：能探索、能收敛、能解释、能撤销、能交付。
 
 ---
 
-## 3. 系统架构
+## 1. 产品定位
 
-### 3.1 整体架构
+### 1.1 一句话定位
+
+ReqFlow 是一个面向独立开发者和小团队的 AI 需求澄清工作台，帮助用户从模糊想法出发，通过对话、原型、验收标准和技术方案的持续校准，形成可直接进入开发的规格包。
+
+### 1.2 目标用户
+
+| 用户 | 典型场景 | 核心诉求 |
+|------|----------|----------|
+| 独立开发者 | 有产品想法，但不知道怎么拆需求 | 快速把想法变成可执行开发规格 |
+| 小团队负责人 | 没有专职产品经理，需求靠口头沟通 | 降低理解偏差，沉淀统一文档 |
+| AI 编程用户 | 想交给 Codex、Claude Code、Cursor 实现 | 先把需求讲清楚，避免 AI 直接写偏 |
+| 外包/协作发起人 | 需要把需求交付给他人开发 | 输出明确范围、验收标准和原型 |
+
+### 1.3 核心问题
+
+传统需求澄清有三个断点：
+
+1. 用户不知道如何表达需求，只能说“我想做个类似 xxx 的东西”。
+2. 文档、原型、技术方案和验收标准彼此分离，改一处容易漏三处。
+3. AI 虽然能生成内容，但容易过早收敛、擅自改动、上下文漂移，最后产物看似完整但不可开发。
+
+ReqFlow v1.0 要解决的不是“让 AI 写文档”，而是“让 AI 在有边界的循环里帮助需求逐步收敛”。
+
+---
+
+## 2. 设计目标与非目标
+
+### 2.1 设计目标
+
+- 用户只需要输入碎片想法，系统负责追问、整理和推进。
+- 每次需求变化都能说明影响范围，并由用户确认后再落文档。
+- 所有关键产物保持一致：需求、技术方案、验收标准、原型、任务拆解。
+- 每次确认变更都保存快照，可对比、可回滚。
+- 冻结前自动体检，避免带着未解决冲突进入开发。
+- 最终输出一个可交付规格包，而不是一段聊天记录。
+
+### 2.2 非目标
+
+- v1.0 不做多人实时协作。
+- v1.0 不直接生成完整生产代码。
+- v1.0 不追求复杂权限系统，优先本地单人可信工作流。
+- v1.0 不把 AI 原型当最终 UI，只作为需求确认工具。
+
+---
+
+## 3. 核心自循环模型
+
+### 3.1 从“双环迭代”升级为“受控双环”
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Frontend (React)                  │
-│                                                     │
-│  ┌──────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ 欢迎页    │  │  工作台       │  │  文档导出     │  │
-│  │ Welcome  │  │  Workspace   │  │  Export      │  │
-│  └──────────┘  └──────────────┘  └──────────────┘  │
-│                                                     │
-│  ┌────────┐ ┌──────────┐ ┌───────┐ ┌────────────┐  │
-│  │版本历史 │ │ 对话面板  │ │阶段栏 │ │ 文档预览    │  │
-│  │Version │ │ Chat     │ │Stage  │ │ DocPreview │  │
-│  │History │ │ Panel    │ │Ind.   │ │            │  │
-│  └────────┘ └──────────┘ └───────┘ └────────────┘  │
-│                                                     │
-│  状态管理：Zustand    API 层：SSE + REST             │
-└────────────────────────┬────────────────────────────┘
-                         │ HTTP / SSE
-┌────────────────────────▼────────────────────────────┐
-│                   Backend (Express)                   │
-│                                                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │
-│  │ Session 路由  │  │  Chat 路由    │  │ AI 服务   │  │
-│  │ /api/session │  │  /api/chat   │  │ OpenAI    │  │
-│  └──────────────┘  └──────────────┘  └───────────┘  │
-│                                                      │
-│  ┌──────────────┐  ┌──────────────┐                  │
-│  │ 文档解析器    │  │  会话存储     │                  │
-│  │ parseUpdates │  │  MemoryStore │                  │
-│  └──────────────┘  └──────────────┘                  │
-└────────────────────────┬─────────────────────────────┘
-                         │ API Call
-                ┌────────▼────────┐
-                │  DeepSeek / GPT  │
-                │  LLM Service     │
-                └─────────────────┘
+                 外环：方向校准
+        ┌─────────────────────────────┐
+        │                             │
+        │  需求宪法 ← 认知冲突 ← 原型反馈 │
+        │     │                       │
+        │     ▼                       │
+        │  重新澄清 → 变更提案 → 确认    │
+        │                             │
+        └──────────────┬──────────────┘
+                       │
+                       ▼
+                 内环：细节收敛
+        ┌─────────────────────────────┐
+        │                             │
+        │  用户反馈 → 影响分析 → 提案   │
+        │     ▲             │         │
+        │     │             ▼         │
+        │  质量检查 ← 应用变更 ← 确认   │
+        │                             │
+        └─────────────────────────────┘
 ```
 
-### 3.2 技术栈
+内环处理“方向已对，只是细节不对”的问题，例如字段、页面、规则、验收条件调整。
 
-| 层 | 技术 | 选型理由 |
-|----|------|---------|
-| 前端框架 | React 18 | 生态成熟，组件化 |
-| 样式 | Tailwind CSS | 原子化 CSS，开发速度快 |
-| 状态管理 | Zustand | 轻量，API 简洁 |
-| Markdown 渲染 | react-markdown | AI 回复格式化 |
-| 后端框架 | Express | 简单稳定 |
-| AI SDK | OpenAI SDK | 兼容 DeepSeek 等 OpenAI 格式 API |
-| 流式输出 | SSE (Server-Sent Events) | 单向流，适合 AI 逐字输出 |
-| 运行时 | tsx | TypeScript 直接执行，开发体验好 |
+外环处理“方向不对，需要重新定义产品”的问题，例如从博客变成社区，从工具变成内容产品，从个人使用变成团队协作。
 
-### 3.3 数据模型
+v1.0 的关键是：AI 不能直接把用户反馈写进最终文档，必须先经过影响分析和变更提案。
+
+### 3.2 自循环的五个控制器
+
+| 控制器 | 作用 | 解决的问题 |
+|--------|------|------------|
+| 需求宪法 | 记录产品不可轻易推翻的核心定义 | 防止多轮对话后目标漂移 |
+| 变更分类器 | 判断反馈属于微调、扩展、冲突还是推翻 | 防止所有反馈都被当成普通修改 |
+| 影响分析器 | 判断本次变化影响哪些文档和流程 | 防止只改需求、不改验收或原型 |
+| 质量闸门 | 检查当前产物是否足够进入下一阶段 | 防止过早收敛和虚假完整 |
+| 版本快照 | 每次确认变更后保存完整状态 | 防止试错后无法回退 |
+
+### 3.3 标准循环步骤
+
+```
+用户输入反馈
+  │
+  ▼
+变更分类：fix / idea / conflict / reset
+  │
+  ▼
+影响分析：需求 / 技术 / 验收 / 原型 / 任务
+  │
+  ▼
+生成变更提案
+  │
+  ├── 用户接受 → 应用变更 → 保存快照 → 质量检查
+  │
+  ├── 用户拒绝 → 丢弃提案 → 保持当前版本
+  │
+  └── 用户补充 → 更新提案 → 再确认
+```
+
+这条循环是 v1.0 的核心。它让 AI 有主动性，但每次真正改变需求资产前都留下解释和确认点。
+
+---
+
+## 4. 阶段状态机
+
+### 4.1 顶层阶段
+
+| 阶段 | 目标 | 进入条件 | 退出条件 |
+|------|------|----------|----------|
+| CLARIFY | 把模糊想法变成可讨论需求 | 用户创建会话 | 需求宪法已形成，关键问题可控 |
+| DRAFT | 生成第一版规格草案 | 澄清质量达标 | 需求、验收、原型至少有可审阅版本 |
+| REVIEW | 基于原型和文档循环校准 | 草案生成完成 | 冻结体检通过，用户确认 |
+| FROZEN | 锁定可开发规格包 | 冻结检查通过 | 开新版本或复制会话后继续 |
+
+### 4.2 阶段质量门槛
+
+#### CLARIFY → DRAFT
+
+必须满足：
+
+- 已明确目标用户。
+- 已明确核心使用场景。
+- 已明确产品核心价值。
+- 已列出 P0 功能范围。
+- 已列出至少 3 条明确不做项或边界。
+- 待确认问题不超过 5 个，且没有阻断级问题。
+
+#### DRAFT → REVIEW
+
+必须满足：
+
+- 需求文档包含用户、场景、范围、功能、规则、风险。
+- P0 功能都有可测试验收标准。
+- 原型覆盖核心路径。
+- 技术方案至少覆盖模块、数据模型、接口边界。
+- 文档之间没有明显冲突。
+
+#### REVIEW → FROZEN
+
+必须满足：
+
+- 所有阻断级待确认项已关闭。
+- P0 和 P1 功能都有验收标准。
+- 原型与需求中的核心流程一致。
+- 技术方案没有未解释的高风险依赖。
+- 用户明确确认可以进入开发。
+
+### 4.3 临时状态
+
+除了顶层阶段，系统内部维护临时状态：
+
+| 临时状态 | 含义 |
+|----------|------|
+| IDLE | 没有待处理提案 |
+| THINKING | AI 正在生成回复 |
+| PROPOSAL_PENDING | 有变更提案等待用户确认 |
+| APPLYING | 正在应用提案并生成快照 |
+| CHECKING | 正在执行质量检查 |
+| BLOCKED | 存在阻断项，不能进入下一阶段 |
+
+临时状态不改变主流程阶段，但决定 UI 上可用的按钮和下一步动作。
+
+---
+
+## 5. 核心数据模型
+
+### 5.1 Session
 
 ```typescript
-// 会话（核心实体）
+type Stage = 'clarify' | 'draft' | 'review' | 'frozen';
+type RuntimeState = 'idle' | 'thinking' | 'proposal_pending' | 'applying' | 'checking' | 'blocked';
+
 interface Session {
   id: string;
-  idea: string;                    // 用户的一句话想法
-  stage: 'clarify' | 'draft' | 'review' | 'frozen';
-  version: number;                 // 每次文档更新 +1
+  title: string;
+  originalIdea: string;
+  stage: Stage;
+  runtimeState: RuntimeState;
+  currentVersion: number;
+
+  constitution: RequirementConstitution;
   requirement: RequirementDoc | null;
   tech: TechDoc | null;
   acceptance: AcceptanceDoc | null;
   prototype: PrototypeDoc | null;
-  messages: ChatMessage[];         // 完整对话历史
-  changelog: Changelog[];          // 版本变更记录
+  taskPlan: TaskPlanDoc | null;
+
+  openQuestions: OpenQuestion[];
+  decisions: DecisionRecord[];
+  risks: RiskRecord[];
+  pendingProposal: ChangeProposal | null;
+
+  messages: ChatMessage[];
+  snapshots: VersionSnapshot[];
+
   createdAt: number;
   updatedAt: number;
 }
+```
 
-// 需求文档
+### 5.2 需求宪法
+
+需求宪法是防漂移锚点。普通 `/fix` 不能直接修改它，只有外环变更或用户明确确认后才能修改。
+
+```typescript
+interface RequirementConstitution {
+  productName: string;
+  oneSentence: string;
+  targetUsers: string[];
+  coreValue: string;
+  primaryScenario: string;
+  successCriteria: string[];
+  nonGoals: string[];
+  lockedDecisions: string[];
+}
+```
+
+### 5.3 需求文档
+
+```typescript
 interface RequirementDoc {
-  productDef: {
-    description: string;   // 一句话描述
-    targetUsers: string;   // 目标用户
-    coreValue: string;     // 核心价值
+  overview: {
+    background: string;
+    problem: string;
+    goal: string;
+  };
+  users: Array<{
+    name: string;
+    description: string;
+    painPoints: string[];
+  }>;
+  scenarios: Array<{
+    name: string;
+    trigger: string;
+    userGoal: string;
+    mainFlow: string[];
+    exceptions: string[];
+  }>;
+  scope: {
+    inScope: string[];
+    outOfScope: string[];
   };
   features: Array<{
+    id: string;
     priority: 'P0' | 'P1' | 'P2';
     name: string;
     description: string;
-    notes: string;
+    userValue: string;
+    relatedScenarios: string[];
   }>;
-  excluded: string[];          // 明确不做的事
-  rules: string[];             // 关键规则
-  pendingQuestions: string[];  // 待确认项
-}
-
-// 技术方案
-interface TechDoc {
-  techStack: Array<{ tech: string; reason: string }>;
-  modules: Array<{ name: string; description: string; dependencies: string[] }>;
-  dataModels: Array<{ name: string; fields: Field[] }>;
-  apis: Array<{ method: string; path: string; description: string }>;
-}
-
-// 验收标准
-interface AcceptanceDoc {
-  features: Array<{
-    name: string;
-    cases: Array<{
-      scenario: string;    // 场景
-      operation: string;   // 操作
-      expected: string;    // 预期结果
-      boundary: string;    // 边界条件
-    }>;
+  businessRules: Array<{
+    id: string;
+    rule: string;
+    reason: string;
   }>;
+  nonFunctional: {
+    performance: string[];
+    security: string[];
+    usability: string[];
+    compatibility: string[];
+  };
+  assumptions: string[];
+  openQuestions: string[];
 }
-
-// 原型
-interface PrototypeDoc {
-  html: string;     // 完整 HTML 文件
-  pages: string[];  // 页面名称列表
-}
 ```
 
----
-
-## 4. 核心流程详解
-
-### 4.1 需求澄清流程
-
-```
-用户输入想法
-     │
-     ▼
-┌─────────────────────────────────┐
-│ ① 创建 Session (stage=clarify) │
-└─────────────┬───────────────────┘
-              │
-              ▼
-┌─────────────────────────────────┐
-│ ② AI 第一轮追问                 │
-│   - 识别模糊点                  │
-│   - 提出2-3个选择题             │
-│   - 给出选项引导 (A/B/C)        │
-└─────────────┬───────────────────┘
-              │
-              ▼
-         用户回答
-              │
-              ▼
-┌─────────────────────────────────┐
-│ ③ AI 解析回答 + 继续追问        │
-│   - 更新已知信息                │
-│   - 识别新的模糊点              │
-│   - 缩小问题范围                │
-│   - 可能输出 ```requirement```  │
-└─────────────┬───────────────────┘
-              │
-              ▼
-       需求是否足够清晰？
-        │           │
-       否           是
-        │           │
-        ▼           ▼
-   继续追问    输出需求文档
-                   │
-                   ▼
-            stage → draft
-```
-
-### 4.2 文档生成与更新流程
-
-```
-AI 回复
-   │
-   ▼
-parseDocUpdates() 解析
-   │
-   ├── 匹配 ```requirement``` → 更新 RequirementDoc
-   ├── 匹配 ```tech```        → 更新 TechDoc
-   ├── 匹配 ```acceptance```  → 更新 AcceptanceDoc
-   ├── 匹配 ```prototype```   → 更新页面列表
-   └── 匹配 ```stage```       → 更新阶段
-   │
-   ▼
-version + 1
-changelog 记录变更
-   │
-   ▼
-updateSession() 持久化
-   │
-   ▼
-前端 getSession() 拉取最新数据
-   │
-   ▼
-文档面板自动刷新
-```
-
-### 4.3 原型生成流程
-
-```
-用户点击「生成原型」
-        │
-        ▼
-前端 POST /api/chat/:id/prototype
-        │
-        ▼
-后端构建 Prompt：
-  - 系统提示词：UI/UX 设计师 + 前端开发角色
-  - 用户消息：当前需求 JSON + 页面列表
-  - 指令：输出完整 HTML 文件
-        │
-        ▼
-AI 生成完整 HTML（含 Tailwind CDN）
-        │
-        ▼
-清理 markdown 代码块标记
-        │
-        ▼
-保存到 session.prototype.html
-        │
-        ▼
-前端 iframe srcDoc 渲染
-  - 桌面模式：全宽
-  - 手机模式：375x667
-```
-
-### 4.4 迭代回退流程
-
-| 触发 | 回退到 | 保留什么 | 清除什么 |
-|------|--------|---------|---------|
-| `/fix 具体问题` | 当前阶段 | 全部 | 只修改指定部分 |
-| `/idea 新想法` | 当前阶段 | 全部 | AI 评估影响范围，更新受影响文档 |
-| `/reset` | clarify | idea, id | requirement, tech, acceptance, prototype, messages |
-| 修改核心方向 | clarify | idea, id | 同上 |
-
----
-
-## 5. AI Prompt 设计
-
-### 5.1 系统 Prompt 结构
-
-```
-┌─────────────────────────────────────┐
-│ 角色定义                             │
-│ "你是 AI 全栈产品团队"                │
-│ 同时扮演：产品经理/架构师/设计师/      │
-│ 测试工程师/文档专家                    │
-├─────────────────────────────────────┤
-│ 工作原则                             │
-│ 1. 每轮只问2-3个关键问题              │
-│ 2. 问题要具体，给选项引导              │
-│ 3. 逐步锁定核心要素                   │
-│ 4. 需求清晰时主动生成文档             │
-├─────────────────────────────────────┤
-│ 输出格式约定                          │
-│ ```requirement → 需求文档更新         │
-│ ```tech        → 技术方案更新         │
-│ ```acceptance  → 验收标准更新         │
-│ ```prototype   → 原型页面列表         │
-│ ```stage       → 阶段变更             │
-├─────────────────────────────────────┤
-│ 当前会话状态（动态注入）              │
-│ 想法: xxx                            │
-│ 阶段: clarify                        │
-│ 版本: 3                              │
-└─────────────────────────────────────┘
-```
-
-### 5.2 为什么这样设计 Prompt
-
-| 设计决策 | 理由 |
-|---------|------|
-| 多角色合一 | 避免 AI 在不同角色间切换时丢失上下文 |
-| 结构化标记 | 让 AI 回复同时服务于人类阅读和程序解析 |
-| 每轮只问2-3个 | 信息过载会让用户放弃，少问多轮比多问少轮好 |
-| 给选项引导 | 开放式问题用户不知道怎么答，选择题降低认知负担 |
-| 注入会话状态 | AI 需要知道当前在哪个阶段，才能决定是追问还是生成文档 |
-
-### 5.3 原型生成 Prompt
-
-独立于主对话，专门用于生成 HTML 原型：
-
-```
-角色：UI/UX 设计师 + 前端开发
-指令：
-- 使用 Tailwind CSS（CDN）
-- 真实布局、导航、表单、列表
-- 合理的占位内容
-- 单个完整 HTML 文件
-- 美观、现代、有设计感
-- 多页面用 tab/导航切换
-```
-
----
-
-## 6. 前端架构
-
-### 6.1 组件树
-
-```
-App
-├── Welcome                    # 欢迎页（未创建会话时显示）
-│   ├── 标题 + 描述
-│   ├── 想法输入框
-│   └── 示例列表
-│
-└── Workspace                  # 工作台（创建会话后显示）
-    ├── Header
-    │   ├── Logo + 标题
-    │   ├── StageIndicator     # 四阶段进度条
-    │   └── 版本号
-    │
-    ├── VersionHistory         # 左侧：版本历史 + 统计 + 命令说明
-    │
-    ├── ChatPanel              # 中间：对话面板
-    │   ├── MessageBubble[]    # 消息列表（用户/AI）
-    │   ├── StreamingContent   # 流式输出
-    │   ├── CommandBar         # 命令快捷栏
-    │   └── InputBox           # 输入框
-    │
-    └── DocPreview             # 右侧：文档预览
-        ├── TabBar             # 需求/技术/验收/原型 四个 Tab
-        └── Content
-            ├── RequirementView
-            ├── TechView
-            ├── AcceptanceView
-            └── PrototypeView  # iframe 渲染 HTML 原型
-```
-
-### 6.2 状态管理（Zustand）
+### 5.4 技术方案
 
 ```typescript
-interface AppState {
-  // 数据
-  session: Session | null;          // 当前会话
-  docTab: DocTab;                   // 当前文档 Tab
-  streamingContent: string;         // 流式输出缓存
-  isStreaming: boolean;             // 是否正在流式输出
-  error: string | null;             // 错误信息
-
-  // Actions
-  setSession: (session) => void;
-  setDocTab: (tab) => void;
-  setStreamingContent: (content) => void;
-  appendStreamingContent: (content) => void;
-  setIsStreaming: (streaming) => void;
-  setError: (error) => void;
-  addMessage: (msg) => void;
-  updateStage: (stage) => void;
+interface TechDoc {
+  architecture: {
+    style: string;
+    rationale: string;
+    constraints: string[];
+  };
+  techStack: Array<{ tech: string; reason: string; risk?: string }>;
+  modules: Array<{
+    id: string;
+    name: string;
+    responsibility: string;
+    dependencies: string[];
+  }>;
+  dataModels: Array<{
+    name: string;
+    fields: Array<{
+      name: string;
+      type: string;
+      required: boolean;
+      description: string;
+    }>;
+  }>;
+  apis: Array<{
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    path: string;
+    description: string;
+    request?: string;
+    response?: string;
+  }>;
+  risks: RiskRecord[];
 }
 ```
 
-### 6.3 流式通信
+### 5.5 验收标准
 
+```typescript
+interface AcceptanceDoc {
+  featureCases: Array<{
+    featureId: string;
+    cases: Array<{
+      id: string;
+      scenario: string;
+      given: string;
+      when: string;
+      then: string;
+      boundary?: string;
+      priority: 'must' | 'should' | 'could';
+    }>;
+  }>;
+  releaseChecklist: string[];
+}
 ```
-前端                          后端
-  │                             │
-  │  POST /api/chat/:id/stream  │
-  │  { message, command }       │
-  │────────────────────────────►│
-  │                             │ 构建上下文
-  │                             │ 调用 AI API (stream=true)
-  │                             │
-  │  event: delta               │
-  │  data: { content: "好" }    │◄─── AI 逐字输出
-  │  event: delta               │
-  │  data: { content: "的" }    │◄───
-  │  event: delta               │
-  │  data: { content: "..." }   │◄───
-  │  ...                        │
-  │                             │ 解析文档更新
-  │  event: done                │
-  │  data: { updates: [...] }   │◄─── 完成
-  │                             │
-  │  GET /api/session/:id       │
-  │────────────────────────────►│
-  │  { requirement, tech, ... } │◄─── 拉取最新数据
-  │                             │
+
+### 5.6 变更提案
+
+```typescript
+type ChangeType = 'fix' | 'idea' | 'conflict' | 'reset' | 'freeze';
+type ImpactTarget = 'constitution' | 'requirement' | 'tech' | 'acceptance' | 'prototype' | 'taskPlan';
+
+interface ChangeProposal {
+  id: string;
+  type: ChangeType;
+  summary: string;
+  userIntent: string;
+  impactTargets: ImpactTarget[];
+  impactLevel: 'low' | 'medium' | 'high';
+  reason: string;
+  proposedChanges: Array<{
+    target: ImpactTarget;
+    before: string;
+    after: string;
+    reason: string;
+  }>;
+  conflicts: string[];
+  requiresConfirmation: boolean;
+  createdAt: number;
+}
+```
+
+### 5.7 质量报告
+
+```typescript
+interface QualityReport {
+  score: number; // 0-100
+  stage: Stage;
+  blockers: string[];
+  warnings: string[];
+  passedChecks: string[];
+  nextActions: string[];
+}
+```
+
+### 5.8 版本快照
+
+```typescript
+interface VersionSnapshot {
+  version: number;
+  proposalId: string | null;
+  summary: string;
+  constitution: RequirementConstitution;
+  requirement: RequirementDoc | null;
+  tech: TechDoc | null;
+  acceptance: AcceptanceDoc | null;
+  prototype: PrototypeDoc | null;
+  taskPlan: TaskPlanDoc | null;
+  qualityReport: QualityReport | null;
+  createdAt: number;
+}
 ```
 
 ---
 
-## 7. API 设计
+## 6. AI 工作流设计
 
-### 7.1 会话管理
+### 6.1 AI 不再直接改文档
+
+v0 的方式是：AI 回复中嵌入文档标记，后端解析后直接更新文档。
+
+v1.0 改为：AI 先生成自然语言回复和结构化提案，只有用户确认后才应用到正式文档。
+
+```
+用户消息
+  │
+  ▼
+AI Orchestrator
+  │
+  ├── 自然语言回复：解释、追问、建议
+  │
+  └── 结构化输出：ChangeProposal / Questions / QualityReport
+        │
+        ▼
+Schema 校验
+        │
+        ├── 成功 → 展示提案
+        └── 失败 → 自动重试一次，仍失败则提示用户
+```
+
+### 6.2 Prompt 分层
+
+| Prompt | 作用 | 输出 |
+|--------|------|------|
+| Clarifier Prompt | 澄清模糊需求 | 问题、已知事实、待确认项 |
+| Classifier Prompt | 判断反馈类型 | fix / idea / conflict / reset |
+| Proposal Prompt | 生成变更提案 | ChangeProposal |
+| Writer Prompt | 应用已确认提案 | 更新后的文档对象 |
+| Quality Prompt | 执行质量检查 | QualityReport |
+| Prototype Prompt | 生成原型 | HTML + 页面清单 |
+| Freeze Prompt | 生成最终规格包 | 冻结摘要 + 开发任务 |
+
+### 6.3 结构化输出协议
+
+流式输出只用于人类可读回复。结构化数据通过单独字段返回。
+
+```typescript
+interface AssistantTurnResult {
+  message: string;
+  suggestedQuestions: string[];
+  proposal: ChangeProposal | null;
+  qualityReport: QualityReport | null;
+  recommendedAction:
+    | 'answer_questions'
+    | 'accept_proposal'
+    | 'generate_docs'
+    | 'generate_prototype'
+    | 'run_quality_check'
+    | 'freeze';
+}
+```
+
+后端必须使用 schema 校验结构化输出，禁止用正则从 Markdown 代码块里猜 JSON。
+
+### 6.4 追问策略
+
+AI 每轮最多问 3 个问题，但不是所有问题都必须是选择题。
+
+| 问题类型 | 使用场景 | 示例 |
+|----------|----------|------|
+| 选择题 | 用户没有明确偏好 | 这个工具主要给 A 个人用，B 团队用，还是 C 对外客户用？ |
+| 确认题 | AI 已有推断 | 我理解这是一个本地优先工具，不需要账号系统，对吗？ |
+| 排序题 | 需要明确优先级 | 速度、准确性、可视化，你最看重哪一个？ |
+| 开放补充 | 选项覆盖不了 | 有没有必须保留的业务规则？ |
+
+---
+
+## 7. 核心流程
+
+### 7.1 创建会话
+
+```
+用户输入一句话想法
+  │
+  ▼
+创建 Session
+  │
+  ▼
+AI 生成第一轮澄清问题
+  │
+  ▼
+保存 version 0 快照
+```
+
+### 7.2 澄清循环
+
+```
+用户回答问题
+  │
+  ▼
+AI 提取事实、假设、待确认项
+  │
+  ▼
+更新需求宪法草案
+  │
+  ▼
+质量闸门判断是否可进入 DRAFT
+  │
+  ├── 未达标 → 继续追问
+  └── 达标 → 生成第一版需求文档提案
+```
+
+### 7.3 变更提案循环
+
+```
+用户输入：/fix 首页太复杂
+  │
+  ▼
+分类器：fix，低影响
+  │
+  ▼
+影响分析：prototype + requirement.scenarios
+  │
+  ▼
+生成提案：
+  - 首页减少统计卡片
+  - 保留主行动按钮
+  - 原型需重新生成
+  │
+  ▼
+用户接受
+  │
+  ▼
+应用变更，保存 v5 快照
+```
+
+### 7.4 外环推翻
+
+外环不是简单 `/reset` 清空，而是一次受控重定义。
+
+```
+用户：这不是博客，我想做社区
+  │
+  ▼
+分类器：conflict，高影响
+  │
+  ▼
+AI 标记与需求宪法冲突
+  │
+  ▼
+展示两种路径：
+  A. 修改当前产品定义
+  B. 复制当前会话，创建新方向
+  C. 完全重置
+  │
+  ▼
+用户确认后执行
+```
+
+### 7.5 原型反馈循环
+
+```
+用户查看原型
+  │
+  ▼
+用户反馈“不对/太复杂/缺页面”
+  │
+  ▼
+AI 归因：
+  - 是视觉布局问题？
+  - 是流程理解问题？
+  - 是需求定义问题？
+  │
+  ▼
+只改受影响资产
+```
+
+原型反馈不能默认只改 HTML。如果反馈暴露的是需求理解问题，必须回到需求文档和验收标准。
+
+### 7.6 冻结流程
+
+```
+用户执行 /freeze
+  │
+  ▼
+运行冻结体检
+  │
+  ├── 有 blocker → 展示阻断项，不允许冻结
+  └── 通过 → 生成冻结提案
+        │
+        ▼
+用户确认
+        │
+        ▼
+保存 frozen 快照
+        │
+        ▼
+导出规格包
+```
+
+冻结后的文档不可直接修改。后续变更必须通过“创建 v1.1 草案”或“复制会话继续迭代”完成。
+
+---
+
+## 8. 命令系统
+
+### 8.1 命令列表
+
+| 命令 | 作用 | 是否需要确认 |
+|------|------|--------------|
+| `/review` | 总结当前状态、待确认项、质量问题 | 否 |
+| `/fix <问题>` | 微调已有内容 | 低影响可一键确认 |
+| `/idea <想法>` | 增加新想法并评估影响 | 是 |
+| `/accept` | 接受当前变更提案 | 否 |
+| `/reject` | 拒绝当前变更提案 | 否 |
+| `/diff <版本号>` | 对比当前版本和历史版本 | 否 |
+| `/rollback <版本号>` | 回退到某个快照 | 是 |
+| `/generate-tech` | 基于当前需求生成技术方案提案 | 是 |
+| `/generate-acceptance` | 基于当前需求生成验收标准提案 | 是 |
+| `/generate-prototype` | 基于当前需求生成原型 | 是 |
+| `/quality` | 运行质量检查 | 否 |
+| `/freeze` | 发起冻结体检和冻结提案 | 是 |
+| `/reset` | 推翻当前方向 | 强确认 |
+
+### 8.2 命令处理原则
+
+- 所有会改变正式文档的命令，都先生成提案。
+- 高影响命令必须展示影响范围和冲突。
+- `/reset` 不直接清空，必须先询问重置、复制新方向或修改宪法。
+- `/rollback` 会生成新版本快照，而不是删除历史。
+- 冻结状态下只允许 `/review`、`/diff`、`/export`、`/new-version`。
+
+---
+
+## 9. 系统架构
+
+### 9.1 总体架构
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                       Frontend                           │
+│ React + Zustand + Markdown Preview + Prototype iframe     │
+│                                                          │
+│  Chat Panel      Proposal Drawer      Doc Preview         │
+│  Quality Panel   Version Timeline     Export Panel        │
+└──────────────────────────────┬───────────────────────────┘
+                               │ REST / SSE
+┌──────────────────────────────▼───────────────────────────┐
+│                       Backend                            │
+│ Express                                                     │
+│                                                          │
+│  Session Service        AI Orchestrator                    │
+│  Proposal Service       Quality Gate Service               │
+│  Snapshot Service       Export Service                     │
+│  Prototype Service      Schema Validator                   │
+└──────────────────────────────┬───────────────────────────┘
+                               │
+┌──────────────────────────────▼───────────────────────────┐
+│                        Storage                           │
+│ SQLite                                                     │
+│ sessions / messages / snapshots / proposals / exports      │
+└──────────────────────────────┬───────────────────────────┘
+                               │
+┌──────────────────────────────▼───────────────────────────┐
+│                      LLM Provider                         │
+│ OpenAI compatible API: GPT / DeepSeek / local gateway       │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 9.2 后端核心服务
+
+| 服务 | 职责 |
+|------|------|
+| SessionService | 会话创建、读取、阶段变更 |
+| AIOrchestrator | 组织不同 Prompt，处理 AI 调用 |
+| ProposalService | 创建、接受、拒绝变更提案 |
+| DocumentWriter | 将已确认提案应用到正式文档 |
+| QualityGateService | 执行阶段检查和冻结体检 |
+| SnapshotService | 保存快照、diff、rollback |
+| PrototypeService | 生成、保存和安全渲染原型 |
+| ExportService | 导出 Markdown / HTML 规格包 |
+| SchemaValidator | 校验 AI 结构化输出 |
+
+### 9.3 技术栈
+
+| 层 | 技术 | v1.0 决策 |
+|----|------|-----------|
+| 前端 | React 18 + TypeScript | 保持当前技术栈 |
+| 样式 | Tailwind CSS | 保持当前技术栈 |
+| 状态管理 | Zustand | 保持轻量 |
+| 后端 | Express + TypeScript | 保持当前技术栈 |
+| 存储 | SQLite | v1.0 引入，替代内存存储 |
+| AI SDK | OpenAI SDK | 兼容 OpenAI 格式接口 |
+| 校验 | Zod | 校验 AI 结构化输出 |
+| 流式输出 | SSE | 继续用于自然语言回复 |
+| 导出 | Markdown / HTML | v1.0 优先，PDF 延后 |
+
+---
+
+## 10. API 设计
+
+### 10.1 会话
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/session` | 创建会话，body: `{ idea }` |
-| GET | `/api/session/:id` | 获取会话完整数据 |
-| PATCH | `/api/session/:id/stage` | 更新阶段，body: `{ stage }` |
-| POST | `/api/session/:id/reset` | 重置会话（回到 clarify） |
+| POST | `/api/sessions` | 创建会话 |
+| GET | `/api/sessions/:id` | 获取会话完整状态 |
+| PATCH | `/api/sessions/:id/stage` | 阶段变更，由质量闸门控制 |
+| POST | `/api/sessions/:id/quality` | 运行质量检查 |
 
-### 7.2 AI 对话
+### 10.2 对话与 AI
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/chat/:id/stream` | 流式对话，SSE 返回 |
-| POST | `/api/chat/:id/prototype` | 生成原型 HTML |
+| POST | `/api/sessions/:id/chat/stream` | 发送消息，流式返回自然语言 |
+| POST | `/api/sessions/:id/clarify` | 生成澄清问题 |
+| POST | `/api/sessions/:id/freeze` | 发起冻结体检 |
 
-### 7.3 SSE 事件类型
+### 10.3 提案
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/sessions/:id/proposals/current` | 获取当前待确认提案 |
+| POST | `/api/sessions/:id/proposals/:proposalId/accept` | 接受提案并应用 |
+| POST | `/api/sessions/:id/proposals/:proposalId/reject` | 拒绝提案 |
+
+### 10.4 版本
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/sessions/:id/snapshots` | 获取版本快照列表 |
+| GET | `/api/sessions/:id/snapshots/:version` | 获取指定快照 |
+| GET | `/api/sessions/:id/diff?from=1&to=3` | 对比版本 |
+| POST | `/api/sessions/:id/rollback` | 回滚到指定版本并生成新快照 |
+
+### 10.5 原型与导出
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/sessions/:id/prototype` | 生成或重新生成原型 |
+| GET | `/api/sessions/:id/export/markdown` | 导出 Markdown 规格包 |
+| GET | `/api/sessions/:id/export/html` | 导出 HTML 规格包 |
+
+### 10.6 SSE 事件
 
 | 事件 | 数据 | 说明 |
 |------|------|------|
-| `delta` | `{ content: string }` | AI 输出的一个文本片段 |
-| `done` | `{ updates: string[] }` | 对话完成，列出更新的文档类型 |
-| `error` | `{ message: string }` | 错误信息 |
+| `delta` | `{ content: string }` | AI 自然语言片段 |
+| `proposal` | `{ proposalId: string }` | 生成了待确认提案 |
+| `quality` | `{ report: QualityReport }` | 质量检查完成 |
+| `done` | `{ recommendedAction: string }` | 本轮完成 |
+| `error` | `{ message: string; retryable: boolean }` | 错误 |
 
 ---
 
-## 8. 设计决策与权衡
+## 11. 前端体验设计
 
-### 8.1 为什么用 SSE 而不是 WebSocket
+### 11.1 页面结构
 
-| 维度 | SSE | WebSocket |
-|------|-----|-----------|
-| 方向 | 单向（服务端→客户端） | 双向 |
-| 复杂度 | 低，HTTP 协议 | 高，需维护连接状态 |
-| 适用场景 | AI 流式输出 | 实时协作 |
-| 重连 | 自动 | 需手动实现 |
+```
+Workspace
+├── Header
+│   ├── 产品名
+│   ├── 阶段状态
+│   ├── 质量分
+│   └── 当前版本
+│
+├── LeftRail
+│   ├── 版本时间线
+│   ├── 决策记录
+│   └── 风险/待确认项
+│
+├── ChatPanel
+│   ├── 对话历史
+│   ├── AI 追问
+│   ├── 命令输入
+│   └── 快捷操作
+│
+├── ProposalDrawer
+│   ├── 变更摘要
+│   ├── 影响范围
+│   ├── before / after
+│   ├── 冲突提示
+│   └── 接受 / 拒绝 / 继续修改
+│
+└── DocPreview
+    ├── 需求文档
+    ├── 技术方案
+    ├── 验收标准
+    ├── 原型预览
+    └── 任务拆解
+```
 
-ReqFlow 的 AI 输出是典型的单向流，SSE 足够且更简单。
+### 11.2 关键交互
 
-### 8.2 为什么文档标记嵌在对话中而不是单独请求
-
-**方案 A（当前）**：AI 回复中包含文档标记，一次对话同时更新文档
-**方案 B**：对话和文档更新分开，先对话再调 API 生成文档
-
-选择 A 的理由：
-- 减少请求次数，用户体验更流畅
-- AI 能根据对话内容即时更新文档，不会遗漏
-- 用户感知到"对话即文档"，理解成本更低
-
-### 8.3 为什么用内存存储而不是数据库
-
-MVP 阶段选择内存存储的理由：
-- 快速验证核心流程，不引入数据库依赖
-- 需求澄清是短会话（通常1-2小时），不需要持久化
-- 后续可替换为 SQLite/PostgreSQL，接口不变
-
-### 8.4 为什么原型用 iframe 而不是截图
-
-- iframe 中的原型可以交互（点击、滚动）
-- 用户可以直接体验布局和流程
-- 桌面/手机视图切换是实时的
-- 截图只能看不能点，交互感差
-
----
-
-## 9. 已知限制与后续规划
-
-### 9.1 当前限制
-
-| 限制 | 影响 | 优先级 |
-|------|------|--------|
-| 内存存储，重启丢失 | 会话不持久 | P1 |
-| 无用户认证 | 任何人可访问 | P1 |
-| 原型无交互逻辑 | 只能看布局 | P2 |
-| 无协作功能 | 只能单人使用 | P2 |
-| 无文档导出 | 不能下载 | P2 |
-| 无历史版本回滚 | 只能看不能回退 | P3 |
-
-### 9.2 后续规划
-
-**Phase 2 — 基础增强**
-- SQLite 持久化存储
-- 文档导出（Markdown / PDF）
-- 历史版本对比与回滚
-- 原型交互逻辑增强
-
-**Phase 3 — 协作能力**
-- 多人协作会话
-- 评论与批注
-- 需求变更通知
-- 权限管理
-
-**Phase 4 — 开发衔接**
-- 从冻结需求自动生成项目脚手架
-- 对接 CI/CD
-- 与代码仓库联动（需求→Issue→PR）
-- 开发进度追踪
+| 场景 | v1.0 行为 |
+|------|-----------|
+| AI 生成提案 | 右侧弹出 ProposalDrawer，不直接改正式文档 |
+| 用户接受提案 | 应用变更、保存快照、刷新质量报告 |
+| 用户拒绝提案 | 提案进入 rejected 状态，文档不变 |
+| 质量不达标 | 阶段按钮禁用，展示阻断项 |
+| 原型反馈 | 先判断是原型问题还是需求问题 |
+| 冻结成功 | 展示规格包入口和版本号 |
 
 ---
 
-## 10. 文件结构
+## 12. 质量闸门
+
+### 12.1 检查维度
+
+| 检查项 | 说明 | 阻断条件 |
+|--------|------|----------|
+| 完整性 | 关键文档是否齐全 | 缺少需求或验收标准 |
+| 一致性 | 文档之间是否冲突 | 功能存在于需求但没有验收 |
+| 可测试性 | 验收标准是否能执行 | 只有抽象描述，没有 Given/When/Then |
+| 可开发性 | 技术方案是否足够落地 | 没有模块、数据模型或接口边界 |
+| 范围控制 | 是否有明确不做项 | 功能无限扩张 |
+| 风险透明 | 高风险是否被记录 | 关键风险无说明 |
+| 原型覆盖 | 原型是否覆盖核心路径 | P0 流程没有原型 |
+
+### 12.2 质量评分
+
+| 分数 | 状态 | 含义 |
+|------|------|------|
+| 0-59 | blocked | 不能进入下一阶段 |
+| 60-79 | warning | 可以继续迭代，不建议冻结 |
+| 80-89 | ready | 可以进入下一阶段 |
+| 90-100 | frozen-ready | 可以冻结 |
+
+评分只用于辅助判断，真正阻断以 blockers 为准。
+
+---
+
+## 13. 原型设计与安全
+
+### 13.1 原型生成原则
+
+- 原型必须服务于需求确认，不追求最终视觉。
+- 原型要覆盖 P0 核心流程。
+- 多页面原型必须有清晰导航。
+- 手机/桌面视图需要可切换。
+- 生成后要记录对应需求版本。
+
+### 13.2 iframe 安全
+
+原型使用 iframe 渲染，但必须加安全边界：
+
+```html
+<iframe
+  sandbox="allow-scripts"
+  referrerpolicy="no-referrer"
+  srcdoc="..."
+/>
+```
+
+v1.0 原型限制：
+
+- 默认不允许访问父页面。
+- 默认不允许表单真实提交。
+- 默认不允许加载未知远程脚本。
+- Tailwind CDN 可在本地开发阶段放开，后续应改为内联样式或受控资源。
+
+---
+
+## 14. 存储设计
+
+v1.0 使用 SQLite，原因是需求资产必须可靠保存，内存存储不足以支撑真实使用。
+
+### 14.1 核心表
+
+| 表 | 内容 |
+|----|------|
+| `sessions` | 会话基础信息、阶段、当前版本 |
+| `messages` | 用户和 AI 对话 |
+| `documents` | 当前文档对象 |
+| `proposals` | 变更提案 |
+| `snapshots` | 版本快照 |
+| `quality_reports` | 质量检查结果 |
+| `exports` | 导出记录 |
+
+### 14.2 快照策略
+
+- 创建会话时保存 v0。
+- 每次接受提案后保存新版本。
+- 生成原型后保存新版本。
+- 冻结时保存不可变 frozen 快照。
+- 回滚不会删除历史，而是生成新的当前版本。
+
+---
+
+## 15. 导出规格包
+
+冻结后生成规格包，包含：
+
+1. 产品概述
+2. 需求宪法
+3. 用户与场景
+4. 功能范围
+5. 业务规则
+6. 非功能需求
+7. 技术方案
+8. 数据模型
+9. API 草案
+10. 验收标准
+11. 原型页面清单
+12. 开发任务拆解
+13. 风险与假设
+14. 决策记录
+15. 版本历史摘要
+
+v1.0 优先支持 Markdown 和 HTML 导出。PDF 可作为后续能力。
+
+---
+
+## 16. v1.0 实施范围
+
+### 16.1 必须实现
+
+- SQLite 持久化。
+- 需求宪法。
+- 变更提案确认流。
+- 影响范围分析。
+- 版本快照。
+- 质量检查。
+- 冻结体检。
+- Markdown 导出。
+- 原型 iframe 安全边界。
+
+### 16.2 可以延后
+
+- 多人协作。
+- 用户账号和权限。
+- PDF 导出。
+- 代码仓库联动。
+- 自动生成完整工程代码。
+- 评论批注系统。
+- 实时多人编辑。
+
+---
+
+## 17. 产品级验收标准
+
+ReqFlow v1.0 自身需要满足以下验收标准：
+
+| 编号 | 验收项 | 标准 |
+|------|--------|------|
+| A1 | 创建会话 | 用户输入一句话想法后，系统能创建会话并提出首轮澄清问题 |
+| A2 | 澄清收敛 | 用户回答 3-5 轮后，系统能形成需求宪法和第一版需求文档 |
+| A3 | 提案确认 | 用户提出修改时，系统先展示变更提案，不直接改正式文档 |
+| A4 | 影响分析 | 每个提案都能说明影响哪些文档 |
+| A5 | 快照保存 | 接受提案后自动生成新版本快照 |
+| A6 | 回滚 | 用户可以回滚到历史版本，并生成新的当前版本 |
+| A7 | 质量检查 | 系统能列出 blockers、warnings 和下一步建议 |
+| A8 | 冻结限制 | 存在 blockers 时不允许冻结 |
+| A9 | 导出 | 冻结后能导出 Markdown 规格包 |
+| A10 | 原型安全 | 原型在 sandbox iframe 中渲染，不影响主应用 |
+
+---
+
+## 18. 从当前版本迁移到 v1.0
+
+### 18.1 代码层迁移顺序
+
+1. 引入 SQLite 和数据访问层。
+2. 扩展 Session / Document / Snapshot 类型。
+3. 替换 Markdown 代码块解析，改为结构化输出校验。
+4. 增加 ProposalService 和 ProposalDrawer。
+5. 增加 SnapshotService 和版本时间线。
+6. 增加 QualityGateService。
+7. 改造 `/freeze` 为冻结体检。
+8. 增加 Markdown 导出。
+9. 加固 Prototype iframe。
+
+### 18.2 文档层迁移
+
+旧版 `RequirementDoc` 可迁移为：
+
+| 旧字段 | 新字段 |
+|--------|--------|
+| `productDef.description` | `constitution.oneSentence` + `requirement.overview.goal` |
+| `productDef.targetUsers` | `constitution.targetUsers` + `requirement.users` |
+| `productDef.coreValue` | `constitution.coreValue` |
+| `features` | `requirement.features` |
+| `excluded` | `constitution.nonGoals` + `requirement.scope.outOfScope` |
+| `rules` | `requirement.businessRules` |
+| `pendingQuestions` | `openQuestions` |
+
+---
+
+## 19. 后续路线
+
+### Phase 1: v1.0 闭环稳定
+
+- 单人本地工作流。
+- SQLite 持久化。
+- 提案确认、快照、回滚、质量闸门、导出。
+
+### Phase 2: 协作增强
+
+- 多人评论。
+- 批注。
+- 权限。
+- 变更通知。
+
+### Phase 3: 开发衔接
+
+- 需求生成 Issue。
+- 任务拆分到代码代理。
+- 需求和 PR 关联。
+- 验收标准转自动化测试草案。
+
+### Phase 4: 项目资产库
+
+- 多项目管理。
+- 模板库。
+- 需求复用。
+- 团队知识沉淀。
+
+---
+
+## 20. 文件结构建议
 
 ```
 req-flow/
 ├── README.md
+├── design-doc.md
 ├── server/
 │   ├── package.json
 │   ├── tsconfig.json
-│   ├── .env                          # AI API 配置
 │   └── src/
-│       ├── index.ts                  # 服务入口
-│       ├── ai.ts                     # AI 服务配置
-│       ├── store.ts                  # 数据模型 + 内存存储
-│       └── routes/
-│           ├── chat.ts               # ★ 核心：AI 对话 + 文档解析 + 命令分发
-│           └── session.ts            # 会话 CRUD
+│       ├── index.ts
+│       ├── ai/
+│       │   ├── client.ts
+│       │   ├── orchestrator.ts
+│       │   ├── prompts.ts
+│       │   └── schemas.ts
+│       ├── db/
+│       │   ├── index.ts
+│       │   ├── migrations.ts
+│       │   └── repositories.ts
+│       ├── services/
+│       │   ├── sessionService.ts
+│       │   ├── proposalService.ts
+│       │   ├── documentWriter.ts
+│       │   ├── qualityGateService.ts
+│       │   ├── snapshotService.ts
+│       │   ├── prototypeService.ts
+│       │   └── exportService.ts
+│       ├── routes/
+│       │   ├── sessions.ts
+│       │   ├── chat.ts
+│       │   ├── proposals.ts
+│       │   ├── snapshots.ts
+│       │   └── exports.ts
+│       └── types.ts
 │
 └── client/
     ├── package.json
     ├── tsconfig.json
-    ├── vite.config.ts
-    ├── tailwind.config.js
-    ├── postcss.config.js
-    ├── index.html
     └── src/
         ├── main.tsx
         ├── App.tsx
-        ├── index.css
-        ├── types.ts                  # 类型定义
-        ├── store.ts                  # Zustand 状态
-        ├── api.ts                    # API 层 + 常量
+        ├── api.ts
+        ├── store.ts
+        ├── types.ts
         └── components/
-            ├── Welcome.tsx           # 欢迎页
-            ├── Workspace.tsx         # ★ 工作台布局（三栏）
-            ├── ChatPanel.tsx         # ★ 对话面板（流式+命令）
-            ├── DocPreview.tsx        # 文档预览容器
-            ├── StageIndicator.tsx    # 阶段进度条
-            ├── VersionHistory.tsx    # 版本历史
-            ├── RequirementView.tsx   # 需求文档视图
-            ├── TechView.tsx          # 技术方案视图
-            ├── AcceptanceView.tsx    # 验收标准视图
-            └── PrototypeView.tsx     # 原型预览（iframe）
+            ├── Workspace.tsx
+            ├── ChatPanel.tsx
+            ├── ProposalDrawer.tsx
+            ├── QualityPanel.tsx
+            ├── VersionTimeline.tsx
+            ├── DocPreview.tsx
+            ├── RequirementView.tsx
+            ├── TechView.tsx
+            ├── AcceptanceView.tsx
+            ├── PrototypeView.tsx
+            └── ExportPanel.tsx
 ```
 
-★ 标记的是核心文件，理解全貌优先阅读这些。
+---
+
+## 21. 核心判断
+
+ReqFlow 的关键价值不在于“AI 生成 PRD”，而在于建立一个受控的需求自循环：
+
+- AI 负责发现问题、提出方案、维护一致性。
+- 用户负责确认方向、取舍范围、锁定决策。
+- 系统负责记录版本、检查质量、防止漂移、确保可回退。
+
+只有这三者分工清楚，ReqFlow 才能从演示型 AI 工具变成真正可依赖的需求生产系统。
