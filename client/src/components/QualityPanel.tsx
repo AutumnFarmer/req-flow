@@ -3,20 +3,22 @@ import type { QualityReport } from '../types';
 export default function QualityPanel({ report }: { report: QualityReport | null }) {
   if (!report) {
     return (
-      <div className="p-4 border-b border-gray-800">
+      <div className="p-4 border-b border-white/10">
         <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">质量闸门</div>
         <p className="text-xs text-gray-600">还没有质量报告</p>
       </div>
     );
   }
 
-  const tone = report.score >= 90 ? 'text-emerald-400' : report.score >= 70 ? 'text-amber-400' : 'text-red-400';
+  const tone = report.score >= 90 ? 'text-cyan-300' : report.score >= 70 ? 'text-amber-300' : 'text-red-300';
 
   return (
-    <div className="p-4 border-b border-gray-800">
+    <div className="p-4 border-b border-white/10">
       <div className="flex items-center justify-between mb-3">
         <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">质量闸门</div>
-        <div className={`text-lg font-bold ${tone}`}>{report.score}</div>
+        <div className={`h-10 w-10 rounded-md border border-white/10 bg-white/[0.03] flex items-center justify-center text-lg font-bold ${tone}`}>
+          {report.score}
+        </div>
       </div>
 
       {report.blockers.length > 0 && (
@@ -35,9 +37,9 @@ function Block({ title, items, tone }: { title: string; items: string[]; tone: '
   return (
     <div className="mb-3 last:mb-0">
       <div className={`text-[11px] font-medium mb-1 ${color}`}>{title}</div>
-      <ul className="space-y-1">
+      <ul className="space-y-1.5">
         {items.map((item, index) => (
-          <li key={index} className="text-[11px] text-gray-500 leading-relaxed">
+          <li key={index} className="text-[11px] text-gray-500 leading-relaxed border-l border-white/10 pl-2">
             {item}
           </li>
         ))}

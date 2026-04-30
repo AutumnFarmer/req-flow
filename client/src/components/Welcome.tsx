@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useAppStore } from '../store';
 import { createSession, getSession, streamChat } from '../api';
+import { useAppStore } from '../store';
 
 export default function Welcome() {
   const [idea, setIdea] = useState('');
@@ -20,8 +20,6 @@ export default function Welcome() {
     try {
       const session = await createSession(idea.trim());
       setSession(session);
-
-      // 自动发起第一轮 AI 对话
       setStreamingContent('');
       setIsStreaming(true);
 
@@ -32,10 +30,9 @@ export default function Welcome() {
         initialMessage,
         undefined,
         (content) => appendStreamingContent(content),
-        async (updates) => {
+        async () => {
           setIsStreaming(false);
           addMessage({ role: 'user', content: initialMessage, timestamp: Date.now() });
-          // 刷新会话数据
           try {
             const updated = await getSession(session.id);
             setSession(updated);
@@ -54,50 +51,59 @@ export default function Welcome() {
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center p-8">
-      <div className="max-w-2xl w-full">
-        {/* Logo & Title */}
-        <div className="text-center mb-12">
-          <div className="text-6xl mb-4">🔄</div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-400 to-blue-400 bg-clip-text text-transparent mb-3">
-            ReqFlow
-          </h1>
-          <p className="text-gray-400 text-lg">AI 需求澄清工作台 — 从一句话想法到可执行方案</p>
-        </div>
-
-        {/* Input */}
-        <div className="relative">
-          <textarea
-            value={idea}
-            onChange={(e) => setIdea(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleStart();
-            }}
-            placeholder="描述你的想法，哪怕只有一句话..."
-            className="w-full h-36 bg-gray-900 border border-gray-700 rounded-2xl p-5 text-gray-100 placeholder-gray-500 resize-none focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all text-lg"
-          />
-          <div className="absolute bottom-4 right-4 flex items-center gap-3">
-            <span className="text-xs text-gray-500">⌘+Enter 发送</span>
-            <button
-              onClick={handleStart}
-              disabled={!idea.trim() || loading}
-              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-xl font-medium transition-all flex items-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <span className="animate-spin">⟳</span> 创建中...
-                </>
-              ) : (
-                <>开始澄清 →</>
-              )}
-            </button>
+    <div className="flex-1 bg-[#080b10] text-gray-100">
+      <header className="h-14 border-b border-white/10 px-8 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-200 flex items-center justify-center text-xs font-semibold">
+            RF
+          </div>
+          <div>
+            <div className="text-sm font-semibold tracking-wide">ReqFlow</div>
+            <div className="text-[11px] text-gray-500">Controlled requirement loop</div>
           </div>
         </div>
+        <div className="text-xs text-gray-500">v1.0 本地工作台</div>
+      </header>
 
-        {/* Examples */}
-        <div className="mt-8">
-          <p className="text-sm text-gray-500 mb-3">试试这些：</p>
-          <div className="grid grid-cols-2 gap-3">
+      <main className="mx-auto max-w-6xl px-8 py-12 grid grid-cols-[minmax(0,1.15fr)_360px] gap-8 max-lg:grid-cols-1 max-sm:px-4 max-sm:py-6">
+        <section>
+          <div className="mb-6">
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300/70 mb-3">Start a session</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-50">把模糊想法压成可开发规格</h1>
+            <p className="mt-3 text-sm leading-6 text-gray-400 max-w-2xl">
+              先输入一句不完整的想法，系统会生成受控提案。正式文档只有在你接受提案后才会更新，并自动保存版本快照。
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-white/10 bg-[#10151d] shadow-2xl shadow-black/30">
+            <div className="border-b border-white/10 px-5 py-3 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-200">新建需求澄清会话</span>
+              <span className="text-[11px] text-gray-500">Command + Enter</span>
+            </div>
+            <div className="p-5">
+              <textarea
+                value={idea}
+                onChange={(e) => setIdea(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleStart();
+                }}
+                placeholder="例如：做一个团队周报系统，先能收集每个人的进展、问题和下周计划..."
+                className="w-full h-40 bg-[#0b0f15] border border-white/10 rounded-md p-4 text-gray-100 placeholder-gray-600 resize-none focus:outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/10 transition-all text-sm leading-6"
+              />
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <p className="text-xs text-gray-500">第一轮会生成需求草案提案，不会直接写入正式文档。</p>
+                <button
+                  onClick={handleStart}
+                  disabled={!idea.trim() || loading}
+                  className="h-10 px-5 bg-cyan-500 hover:bg-cyan-400 disabled:bg-gray-800 disabled:text-gray-500 text-slate-950 rounded-md text-sm font-semibold transition-all whitespace-nowrap"
+                >
+                  {loading ? '创建中...' : '开始澄清'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
             {[
               '我想做一个个人博客',
               '帮团队做一个周报系统',
@@ -107,14 +113,36 @@ export default function Welcome() {
               <button
                 key={ex}
                 onClick={() => setIdea(ex)}
-                className="text-left px-4 py-3 bg-gray-900/50 border border-gray-800 rounded-xl text-gray-400 hover:border-emerald-500/30 hover:text-gray-300 transition-all text-sm"
+                className="text-left px-4 py-3 bg-[#0d1219] border border-white/10 rounded-md text-gray-400 hover:border-cyan-400/30 hover:text-gray-200 transition-all text-sm"
               >
-                💡 {ex}
+                {ex}
               </button>
             ))}
           </div>
-        </div>
-      </div>
+        </section>
+
+        <aside className="rounded-lg border border-white/10 bg-[#0d1219] p-5 h-fit">
+          <h2 className="text-sm font-semibold text-gray-200 mb-4">v1.0 工作流</h2>
+          <div className="space-y-4">
+            {[
+              ['01', '澄清', '识别用户、场景、边界和待确认项'],
+              ['02', '提案', '先展示影响范围，再等待确认'],
+              ['03', '快照', '接受后保存版本，可回滚'],
+              ['04', '冻结', '质量检查通过后输出规格包'],
+            ].map(([step, title, desc]) => (
+              <div key={step} className="flex gap-3">
+                <div className="h-7 w-7 shrink-0 rounded border border-white/10 bg-white/[0.03] text-[11px] text-cyan-300 flex items-center justify-center">
+                  {step}
+                </div>
+                <div>
+                  <div className="text-sm text-gray-200">{title}</div>
+                  <div className="text-xs text-gray-500 mt-0.5 leading-5">{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+      </main>
     </div>
   );
 }

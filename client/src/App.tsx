@@ -6,7 +6,7 @@ export default function App() {
   const session = useAppStore((s) => s.session);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-950">
+    <div className="h-screen flex flex-col bg-[#080b10]">
       {!session ? <Welcome /> : <Workspace />}
     </div>
   );

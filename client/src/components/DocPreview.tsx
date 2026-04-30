@@ -70,19 +70,18 @@ export default function DocPreview() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="grid grid-cols-3 border-b border-gray-800 shrink-0">
+    <div className="flex flex-col h-full bg-[#0b0f15]">
+      <div className="grid grid-cols-3 gap-1 p-2 border-b border-white/10 shrink-0">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setDocTab(tab)}
-            className={`px-3 py-3 text-xs font-medium transition-all relative
-              ${docTab === tab ? 'text-emerald-400' : 'text-gray-500 hover:text-gray-300'}
+            className={`px-3 py-2.5 text-xs font-medium transition-all relative rounded-md border
+              ${docTab === tab ? 'text-cyan-200 bg-cyan-400/10 border-cyan-400/20' : 'text-gray-500 hover:text-gray-300 border-transparent hover:bg-white/[0.03]'}
             `}
           >
             <span>{DOC_TAB_LABELS[tab]}</span>
-            {hasContent(tab) && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />}
-            {docTab === tab && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-emerald-400 rounded-full" />}
+            {hasContent(tab) && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-cyan-300 inline-block" />}
           </button>
         ))}
       </div>
@@ -94,12 +93,12 @@ export default function DocPreview() {
 function EmptyState({ text, action }: { text: string; action?: { label: string; onClick: () => void } }) {
   return (
     <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-      <div className="text-4xl mb-4 opacity-30">□</div>
+      <div className="h-10 w-10 mb-4 rounded-md border border-white/10 bg-white/[0.03]" />
       <p className="text-gray-500 text-sm mb-4">{text}</p>
       {action && (
         <button
           onClick={action.onClick}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-all"
+          className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-semibold rounded-md transition-all"
         >
           {action.label}
         </button>

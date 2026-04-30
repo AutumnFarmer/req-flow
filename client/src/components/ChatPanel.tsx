@@ -101,12 +101,10 @@ export default function ChatPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {/* System message */}
+    <div className="flex flex-col h-full bg-[#080b10]">
+      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
         <div className="flex justify-center">
-          <span className="text-xs text-gray-600 bg-gray-900/50 px-3 py-1 rounded-full">
+          <span className="text-xs text-gray-500 bg-white/[0.03] border border-white/10 px-3 py-1 rounded-md">
             想法：{session.originalIdea}
           </span>
         </div>
@@ -118,15 +116,15 @@ export default function ChatPanel() {
         {/* Streaming content */}
         {isStreaming && streamingContent && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-sm shrink-0">
-              🤖
+            <div className="w-8 h-8 rounded-md bg-cyan-400/10 border border-cyan-400/30 flex items-center justify-center text-[11px] text-cyan-200 shrink-0">
+              AI
             </div>
             <div className="flex-1 min-w-0">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm p-4">
+              <div className="bg-[#10151d] border border-white/10 rounded-lg p-4">
                 <div className="markdown-body text-sm">
                   <ReactMarkdown>{cleanContent(streamingContent)}</ReactMarkdown>
                 </div>
-                <span className="inline-block w-2 h-4 bg-emerald-400 animate-pulse ml-0.5" />
+                <span className="inline-block w-1.5 h-4 bg-cyan-300 animate-pulse ml-0.5" />
               </div>
             </div>
           </div>
@@ -134,14 +132,14 @@ export default function ChatPanel() {
 
         {isStreaming && !streamingContent && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-sm shrink-0">
-              🤖
+            <div className="w-8 h-8 rounded-md bg-cyan-400/10 border border-cyan-400/30 flex items-center justify-center text-[11px] text-cyan-200 shrink-0">
+              AI
             </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm p-4">
+            <div className="bg-[#10151d] border border-white/10 rounded-lg p-4">
               <div className="flex gap-1.5">
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
             </div>
           </div>
@@ -151,24 +149,24 @@ export default function ChatPanel() {
       </div>
 
       {/* Command bar */}
-      <div className="px-6 py-2 border-t border-gray-800/50">
+      <div className="px-6 py-2 border-t border-white/10 bg-[#0b0f15]">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {[
-            { cmd: '/review', label: '👀 审阅' },
-            { cmd: '/quality', label: '✓ 质量' },
-            { cmd: '/generate-tech', label: '🏗️ 技术方案' },
-            { cmd: '/generate-acceptance', label: '✅ 验收标准' },
-            { cmd: '/generate-prototype', label: '🎨 原型' },
+            { cmd: '/review', label: '审阅' },
+            { cmd: '/quality', label: '质量' },
+            { cmd: '/generate-tech', label: '技术方案' },
+            { cmd: '/generate-acceptance', label: '验收标准' },
+            { cmd: '/generate-prototype', label: '原型' },
             { cmd: '/accept', label: '接受提案' },
             { cmd: '/reject', label: '拒绝提案' },
-            { cmd: '/freeze', label: '🔒 冻结' },
-            { cmd: '/reset', label: '🔄 重来' },
+            { cmd: '/freeze', label: '冻结' },
+            { cmd: '/reset', label: '重来' },
           ].map((item) => (
             <button
               key={item.cmd}
               onClick={() => handleCommand(item.cmd)}
               disabled={isStreaming}
-              className="px-3 py-1 bg-gray-900 border border-gray-700 rounded-lg text-xs text-gray-400 hover:text-gray-200 hover:border-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all whitespace-nowrap"
+              className="px-3 py-1.5 bg-white/[0.03] border border-white/10 rounded-md text-xs text-gray-400 hover:text-gray-100 hover:border-cyan-400/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all whitespace-nowrap"
             >
               {item.label}
             </button>
@@ -177,7 +175,7 @@ export default function ChatPanel() {
       </div>
 
       {/* Input */}
-      <div className="px-6 py-4 border-t border-gray-800">
+      <div className="px-6 py-4 border-t border-white/10 bg-[#0b0f15]">
         <div className="flex gap-3">
           <input
             value={input}
@@ -185,12 +183,12 @@ export default function ChatPanel() {
             onKeyDown={handleKeyDown}
             placeholder={isStreaming ? 'AI 正在思考...' : '输入消息或命令（如 /fix 首页布局不对）'}
             disabled={isStreaming}
-            className="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition-all disabled:opacity-50"
+            className="flex-1 bg-[#080b10] border border-white/10 rounded-md px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/10 transition-all disabled:opacity-50"
           />
           <button
             onClick={() => handleSend()}
             disabled={isStreaming || !input.trim()}
-            className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-xl font-medium transition-all"
+            className="px-5 py-3 bg-cyan-500 hover:bg-cyan-400 disabled:bg-gray-800 disabled:text-gray-500 text-slate-950 rounded-md text-sm font-semibold transition-all"
           >
             发送
           </button>
@@ -213,15 +211,15 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
       <div
-        className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0
-          ${isUser ? 'bg-blue-600/20 border border-blue-500/30' : 'bg-emerald-600/20 border border-emerald-500/30'}`}
+        className={`w-8 h-8 rounded-md flex items-center justify-center text-[11px] shrink-0 border
+          ${isUser ? 'bg-sky-400/10 border-sky-400/30 text-sky-200' : 'bg-cyan-400/10 border-cyan-400/30 text-cyan-200'}`}
       >
-        {isUser ? '👤' : '🤖'}
+        {isUser ? '你' : 'AI'}
       </div>
-      <div className={`max-w-[70%] min-w-0 ${isUser ? 'text-right' : ''}`}>
+      <div className={`max-w-[76%] min-w-0 ${isUser ? 'text-right' : ''}`}>
         <div
-          className={`inline-block rounded-2xl p-4 text-left
-            ${isUser ? 'bg-blue-600/20 border border-blue-500/20 rounded-tr-sm' : 'bg-gray-900 border border-gray-800 rounded-tl-sm'}`}
+          className={`inline-block rounded-lg p-4 text-left shadow-sm
+            ${isUser ? 'bg-sky-400/10 border border-sky-400/20' : 'bg-[#10151d] border border-white/10'}`}
         >
           <div className="markdown-body text-sm">
             <ReactMarkdown>{content}</ReactMarkdown>

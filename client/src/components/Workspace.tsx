@@ -11,39 +11,41 @@ export default function Workspace() {
   if (!session) return null;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="h-14 border-b border-gray-800 flex items-center px-4 shrink-0">
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#080b10] text-gray-100">
+      <header className="h-14 border-b border-white/10 bg-[#0b0f15] flex items-center px-5 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-xl">Req</span>
-          <h1 className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-blue-400 bg-clip-text text-transparent">
-            ReqFlow v1.0
-          </h1>
-          <span className="text-gray-600">|</span>
+          <div className="h-8 w-8 rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-200 flex items-center justify-center text-xs font-semibold">
+            RF
+          </div>
+          <div className="leading-tight">
+            <h1 className="text-sm font-semibold text-gray-100">ReqFlow v1.0</h1>
+            <p className="text-[11px] text-gray-500">Controlled requirement loop</p>
+          </div>
+          <span className="h-5 w-px bg-white/10" />
           <span className="text-sm text-gray-400 max-w-xs truncate">{session.originalIdea}</span>
         </div>
         <div className="ml-auto flex items-center gap-4">
-          <span className="text-xs text-gray-500">质量 {session.qualityReport?.score ?? 0}</span>
+          <span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-gray-400">
+            质量 {session.qualityReport?.score ?? 0}
+          </span>
           <StageIndicator />
-          <span className="text-xs text-gray-500">v{session.currentVersion}</span>
+          <span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-gray-400">
+            v{session.currentVersion}
+          </span>
         </div>
       </header>
 
-      {/* Main Content - Three Column */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: Version History */}
-        <div className="w-56 border-r border-gray-800 overflow-y-auto shrink-0">
+        <div className="w-[280px] border-r border-white/10 bg-[#0b0f15] overflow-y-auto shrink-0">
           <VersionHistory />
         </div>
 
-        {/* Center: Proposal + Chat */}
         <div className="flex-1 min-w-0 flex flex-col">
           <ProposalDrawer />
           <ChatPanel />
         </div>
 
-        {/* Right: Doc Preview */}
-        <div className="w-[480px] border-l border-gray-800 shrink-0">
+        <div className="w-[520px] border-l border-white/10 bg-[#0b0f15] shrink-0">
           <DocPreview />
         </div>
       </div>

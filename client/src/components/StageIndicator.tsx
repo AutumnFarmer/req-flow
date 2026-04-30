@@ -1,14 +1,8 @@
 import { useAppStore } from '../store';
-import { STAGE_LABELS, STAGE_COLORS } from '../api';
+import { STAGE_LABELS } from '../api';
 import type { Stage } from '../types';
 
 const STAGES: Stage[] = ['clarify', 'draft', 'review', 'frozen'];
-const STAGE_ICONS: Record<Stage, string> = {
-  clarify: '🔍',
-  draft: '📝',
-  review: '👀',
-  frozen: '✅',
-};
 
 export default function StageIndicator() {
   const session = useAppStore((s) => s.session);
@@ -26,13 +20,13 @@ export default function StageIndicator() {
         return (
           <div key={stage} className="flex items-center">
             <div
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all
-                ${isActive ? STAGE_COLORS[stage] + ' bg-gray-800 border border-gray-700' : ''}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all border
+                ${isActive ? 'text-cyan-200 bg-cyan-400/10 border-cyan-400/30' : 'border-transparent'}
                 ${isPast ? 'text-gray-500' : ''}
                 ${isFuture ? 'text-gray-600' : ''}
               `}
             >
-              <span>{isPast ? '✓' : STAGE_ICONS[stage]}</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${isActive ? 'bg-cyan-300' : isPast ? 'bg-gray-500' : 'bg-gray-700'}`} />
               <span>{STAGE_LABELS[stage]}</span>
             </div>
             {i < STAGES.length - 1 && (
