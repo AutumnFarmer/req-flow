@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { acceptProposal, DOC_TAB_LABELS, generatePrototype } from '../api';
 import { useAppStore } from '../store';
 import type { DocTab } from '../types';
@@ -16,6 +16,7 @@ export default function DocPreview() {
   const setSession = useAppStore((s) => s.setSession);
   const setError = useAppStore((s) => s.setError);
   const [loadingPrototype, setLoadingPrototype] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   if (!session) return null;
 
@@ -77,6 +78,10 @@ export default function DocPreview() {
     }
   }, [session.pendingProposal?.id]);
 
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [activeTab, session.pendingProposal?.id, session.currentVersion]);
+
   const handleGeneratePrototype = async () => {
     if (loadingPrototype) return;
     setLoadingPrototype(true);
@@ -126,7 +131,7 @@ export default function DocPreview() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0b0f15]">
+    <div className="flex min-h-0 h-full flex-col bg-[#0b0f15]">
       <div className="flex gap-1 p-2 border-b border-white/10 shrink-0 overflow-x-auto">
         {tabs.map((tab) => (
           <button
@@ -163,7 +168,7 @@ export default function DocPreview() {
           </div>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto">{renderContent()}</div>
+      <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{renderContent()}</div>
     </div>
   );
 }

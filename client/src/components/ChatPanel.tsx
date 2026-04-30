@@ -143,8 +143,22 @@ export default function ChatPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#080b10]">
-      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+    <div className="flex min-h-0 h-full flex-col bg-[#080b10]">
+      <div className="shrink-0 border-b border-white/10 bg-[#0b0f15] px-5 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-gray-400">对话</div>
+            <div className="mt-0.5 text-[11px] text-gray-600">补充需求、生成方案、运行检查</div>
+          </div>
+          {session.pendingProposal && (
+            <span className="rounded-md border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[11px] text-amber-200">
+              有待应用草案
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 space-y-4">
         <div className="flex justify-center">
           <span className="text-xs text-gray-500 bg-white/[0.03] border border-white/10 px-3 py-1 rounded-md">
             想法：{session.originalIdea}
@@ -191,7 +205,7 @@ export default function ChatPanel() {
       </div>
 
       {/* Command bar */}
-      <div className="px-5 py-2 border-t border-white/10 bg-[#0b0f15]">
+      <div className="shrink-0 px-5 py-2 border-t border-white/10 bg-[#0b0f15]">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {[
             { cmd: '/review', label: '审阅' },
@@ -215,7 +229,7 @@ export default function ChatPanel() {
       </div>
 
       {/* Input */}
-      <div className="px-5 py-3 border-t border-white/10 bg-[#0b0f15]">
+      <div className="shrink-0 px-5 py-3 border-t border-white/10 bg-[#0b0f15]">
         <div className="flex gap-3">
           <input
             value={input}

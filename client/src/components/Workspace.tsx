@@ -28,7 +28,7 @@ export default function Workspace() {
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[#080b10] text-gray-100">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[#080b10] text-gray-100">
       <header className="h-14 border-b border-white/10 bg-[#0b0f15] flex items-center px-5 shrink-0">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-200 flex items-center justify-center text-xs font-semibold">
@@ -61,13 +61,13 @@ export default function Workspace() {
         </div>
       </header>
 
-      <div className="flex-1 grid grid-cols-[minmax(460px,0.42fr)_minmax(560px,0.58fr)] overflow-hidden max-xl:grid-cols-[minmax(420px,0.45fr)_minmax(480px,0.55fr)] max-lg:flex max-lg:flex-col">
-        <div className="min-w-0 flex flex-col border-r border-white/10 max-lg:min-h-[42vh] max-lg:border-r-0 max-lg:border-b">
+      <div className="flex-1 min-h-0 grid grid-cols-[minmax(520px,44%)_minmax(0,1fr)] overflow-hidden max-xl:grid-cols-[minmax(480px,46%)_minmax(0,1fr)] max-lg:flex max-lg:flex-col">
+        <div className="min-w-0 min-h-0 flex flex-col border-r border-white/10 max-lg:min-h-[42vh] max-lg:border-r-0 max-lg:border-b">
           <ProposalDrawer />
           <ChatPanel />
         </div>
 
-        <div className="min-w-0 bg-[#0b0f15]">
+        <div className="min-w-0 min-h-0 bg-[#0b0f15]">
           <DocPreview />
         </div>
       </div>

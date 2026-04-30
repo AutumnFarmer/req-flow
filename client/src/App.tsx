@@ -19,7 +19,7 @@ export default function App() {
   }, [session, setSession]);
 
   return (
-    <div className="h-screen flex flex-col bg-[#080b10]">
+    <div className="h-screen min-h-0 overflow-hidden flex flex-col bg-[#080b10]">
       {!session ? <Welcome /> : <Workspace />}
     </div>
   );
