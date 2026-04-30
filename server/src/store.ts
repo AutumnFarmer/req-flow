@@ -314,7 +314,7 @@ function buildTaskPlan(requirement: RequirementDoc): TaskPlanDoc {
   };
 }
 
-function makeProposal(
+export function makeProposal(
   session: Session,
   type: ChangeProposal['type'],
   summary: string,
@@ -345,7 +345,7 @@ function makeProposal(
   };
 }
 
-function proposalMessage(proposal: ChangeProposal) {
+export function proposalMessage(proposal: ChangeProposal) {
   const targets = proposal.impactTargets.map(targetLabel).join('、');
   return [
     `我先不直接改正式文档，已经生成一份变更提案：${proposal.summary}`,

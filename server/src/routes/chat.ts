@@ -7,6 +7,7 @@ import {
   handleAssistantTurn,
   persist,
 } from '../store.js';
+import { handleLLMAssistantTurn, shouldUseLocalCommand } from '../llm.js';
 
 export const chatRouter = Router();
 
@@ -51,7 +52,9 @@ chatRouter.post('/:id/stream', async (req, res) => {
     if (normalizedMessage) {
       addMessage(session, 'user', normalizedMessage);
     }
-    const result = handleAssistantTurn(session, normalizedMessage, command);
+    const result = shouldUseLocalCommand(command)
+      ? handleAssistantTurn(session, normalizedMessage, command)
+      : await handleLLMAssistantTurn(session, normalizedMessage, command);
     addMessage(session, 'assistant', result.message);
     persist(session);
 
