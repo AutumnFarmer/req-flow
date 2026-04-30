@@ -58,12 +58,24 @@ export default function DocPreview() {
 
   const activeTab = tabs.includes(docTab) ? docTab : tabs[0];
   const activeIsDraft = isDraftTab(activeTab);
+  const activeLabel = DOC_TAB_LABELS[activeTab];
 
   useEffect(() => {
     if (!tabs.includes(docTab)) {
       setDocTab(tabs[0]);
     }
   }, [docTab, setDocTab, tabs]);
+
+  useEffect(() => {
+    const proposal = session.pendingProposal;
+    if (!proposal) return;
+
+    const preferred = (['requirement', 'tech', 'acceptance', 'taskPlan', 'prototype', 'constitution'] as DocTab[])
+      .find((tab) => proposal.impactTargets.includes(tab) && tabs.includes(tab));
+    if (preferred && docTab !== preferred) {
+      setDocTab(preferred);
+    }
+  }, [session.pendingProposal?.id]);
 
   const handleGeneratePrototype = async () => {
     if (loadingPrototype) return;
@@ -121,7 +133,7 @@ export default function DocPreview() {
             key={tab}
             onClick={() => setDocTab(tab)}
             className={`px-3 py-2 text-xs font-medium transition-all relative rounded-md border whitespace-nowrap
-              ${activeTab === tab ? 'text-cyan-200 bg-cyan-400/10 border-cyan-400/20' : 'text-gray-500 hover:text-gray-300 border-transparent hover:bg-white/[0.03]'}
+              ${activeTab === tab ? 'text-cyan-100 bg-cyan-400/15 border-cyan-300/40 shadow-[inset_0_-2px_0_rgba(103,232,249,0.9)]' : 'text-gray-500 hover:text-gray-300 border-transparent hover:bg-white/[0.03]'}
             `}
           >
             <span>{DOC_TAB_LABELS[tab]}</span>
@@ -137,7 +149,7 @@ export default function DocPreview() {
         <div className="border-b border-amber-400/20 bg-amber-400/10 px-4 py-3">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-amber-200">草案预览，尚未写入正式文档</div>
+              <div className="text-xs font-semibold text-amber-200">正在预览：{activeLabel}草案</div>
               <p className="mt-1 text-[11px] leading-4 text-amber-100/70">
                 这是待确认提案里的内容。接受提案后，它才会进入版本快照并成为正式文档。
               </p>
@@ -146,7 +158,7 @@ export default function DocPreview() {
               onClick={handleAcceptProposal}
               className="shrink-0 rounded-md bg-amber-300 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-200 transition-colors"
             >
-              接受提案
+              应用当前草案
             </button>
           </div>
         </div>

@@ -144,7 +144,7 @@ export default function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full bg-[#080b10]">
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
         <div className="flex justify-center">
           <span className="text-xs text-gray-500 bg-white/[0.03] border border-white/10 px-3 py-1 rounded-md">
             想法：{session.originalIdea}
@@ -199,15 +199,13 @@ export default function ChatPanel() {
             { cmd: '/generate-tech', label: '技术方案' },
             { cmd: '/generate-acceptance', label: '验收标准' },
             { cmd: '/generate-prototype', label: '原型' },
-            { cmd: '/accept', label: '接受提案' },
-            { cmd: '/reject', label: '拒绝提案' },
             { cmd: '/freeze', label: '冻结' },
             { cmd: '/reset', label: '重来' },
           ].map((item) => (
             <button
               key={item.cmd}
               onClick={() => handleCommand(item.cmd)}
-              disabled={isStreaming || ((item.cmd === '/accept' || item.cmd === '/reject') && !session.pendingProposal)}
+              disabled={isStreaming}
               className="px-3 py-1.5 bg-white/[0.03] border border-white/10 rounded-md text-xs text-gray-400 hover:text-gray-100 hover:border-cyan-400/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all whitespace-nowrap"
             >
               {item.label}
@@ -258,7 +256,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       >
         {isUser ? '你' : 'AI'}
       </div>
-      <div className={`max-w-[76%] min-w-0 ${isUser ? 'text-right' : ''}`}>
+      <div className={`max-w-[88%] min-w-0 ${isUser ? 'text-right' : ''}`}>
         <div
           className={`inline-block rounded-lg p-4 text-left shadow-sm
             ${isUser ? 'bg-sky-400/10 border border-sky-400/20' : 'bg-[#10151d] border border-white/10'}`}
