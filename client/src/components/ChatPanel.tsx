@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useAppStore } from '../store';
-import { streamChat, getSession } from '../api';
+import { acceptProposal, generatePrototype, getSession, rejectProposal, streamChat } from '../api';
 import type { ChatMessage } from '../types';
 
 export default function ChatPanel() {
@@ -61,18 +61,33 @@ export default function ChatPanel() {
   };
 
   const handleCommand = (cmd: string) => {
-    if (cmd === '/reset') {
+    if (!session) return;
+    if (cmd === '/accept') {
+      if (!session.pendingProposal) return;
+      acceptProposal(session.id, session.pendingProposal.id)
+        .then(setSession)
+        .catch((err) => setError(err.message));
+    } else if (cmd === '/reject') {
+      if (!session.pendingProposal) return;
+      rejectProposal(session.id, session.pendingProposal.id)
+        .then(setSession)
+        .catch((err) => setError(err.message));
+    } else if (cmd === '/generate-prototype') {
+      generatePrototype(session.id)
+        .then(setSession)
+        .catch((err) => setError(err.message));
+    } else if (cmd === '/reset') {
       handleSend('推翻重来，重新开始', 'reset');
     } else if (cmd === '/review') {
       handleSend('审阅当前状态', 'review');
+    } else if (cmd === '/quality') {
+      handleSend('运行质量检查', 'quality');
     } else if (cmd === '/freeze') {
       handleSend('冻结需求', 'freeze');
     } else if (cmd === '/generate-tech') {
       handleSend('生成技术方案', 'generate-tech');
     } else if (cmd === '/generate-acceptance') {
       handleSend('生成验收标准', 'generate-acceptance');
-    } else if (cmd === '/generate-prototype') {
-      handleSend('生成页面原型', 'generate-prototype');
     }
   };
 
@@ -92,7 +107,7 @@ export default function ChatPanel() {
         {/* System message */}
         <div className="flex justify-center">
           <span className="text-xs text-gray-600 bg-gray-900/50 px-3 py-1 rounded-full">
-            💡 想法：{session.idea}
+            想法：{session.originalIdea}
           </span>
         </div>
 
@@ -140,9 +155,12 @@ export default function ChatPanel() {
         <div className="flex gap-2 overflow-x-auto pb-1">
           {[
             { cmd: '/review', label: '👀 审阅' },
+            { cmd: '/quality', label: '✓ 质量' },
             { cmd: '/generate-tech', label: '🏗️ 技术方案' },
             { cmd: '/generate-acceptance', label: '✅ 验收标准' },
             { cmd: '/generate-prototype', label: '🎨 原型' },
+            { cmd: '/accept', label: '接受提案' },
+            { cmd: '/reject', label: '拒绝提案' },
             { cmd: '/freeze', label: '🔒 冻结' },
             { cmd: '/reset', label: '🔄 重来' },
           ].map((item) => (

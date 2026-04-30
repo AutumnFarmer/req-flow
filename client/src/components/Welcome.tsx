@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '../store';
-import { createSession, streamChat } from '../api';
+import { createSession, getSession, streamChat } from '../api';
 
 export default function Welcome() {
   const [idea, setIdea] = useState('');
@@ -37,7 +37,7 @@ export default function Welcome() {
           addMessage({ role: 'user', content: initialMessage, timestamp: Date.now() });
           // 刷新会话数据
           try {
-            const updated = await import('../api').then((m) => m.getSession(session.id));
+            const updated = await getSession(session.id);
             setSession(updated);
           } catch {}
         },

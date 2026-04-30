@@ -1,7 +1,15 @@
 export type Stage = 'clarify' | 'draft' | 'review' | 'frozen';
 export type RuntimeState = 'idle' | 'thinking' | 'proposal_pending' | 'applying' | 'checking' | 'blocked';
 export type DocTab = 'constitution' | 'requirement' | 'tech' | 'acceptance' | 'prototype' | 'taskPlan';
+export type MessageRole = 'user' | 'assistant' | 'system';
+export type ChangeType = 'fix' | 'idea' | 'conflict' | 'reset' | 'freeze' | 'generate';
 export type ImpactTarget = 'constitution' | 'requirement' | 'tech' | 'acceptance' | 'prototype' | 'taskPlan';
+
+export interface ChatMessage {
+  role: MessageRole;
+  content: string;
+  timestamp: number;
+}
 
 export interface RequirementConstitution {
   productName: string;
@@ -15,8 +23,16 @@ export interface RequirementConstitution {
 }
 
 export interface RequirementDoc {
-  overview: { background: string; problem: string; goal: string };
-  users: Array<{ name: string; description: string; painPoints: string[] }>;
+  overview: {
+    background: string;
+    problem: string;
+    goal: string;
+  };
+  users: Array<{
+    name: string;
+    description: string;
+    painPoints: string[];
+  }>;
   scenarios: Array<{
     name: string;
     trigger: string;
@@ -24,7 +40,10 @@ export interface RequirementDoc {
     mainFlow: string[];
     exceptions: string[];
   }>;
-  scope: { inScope: string[]; outOfScope: string[] };
+  scope: {
+    inScope: string[];
+    outOfScope: string[];
+  };
   features: Array<{
     id: string;
     priority: 'P0' | 'P1' | 'P2';
@@ -33,7 +52,11 @@ export interface RequirementDoc {
     userValue: string;
     relatedScenarios: string[];
   }>;
-  businessRules: Array<{ id: string; rule: string; reason: string }>;
+  businessRules: Array<{
+    id: string;
+    rule: string;
+    reason: string;
+  }>;
   nonFunctional: {
     performance: string[];
     security: string[];
@@ -44,22 +67,35 @@ export interface RequirementDoc {
   openQuestions: string[];
 }
 
-export interface RiskRecord {
-  id: string;
-  risk: string;
-  impact: 'low' | 'medium' | 'high';
-  mitigation: string;
-}
-
 export interface TechDoc {
-  architecture: { style: string; rationale: string; constraints: string[] };
+  architecture: {
+    style: string;
+    rationale: string;
+    constraints: string[];
+  };
   techStack: Array<{ tech: string; reason: string; risk?: string }>;
-  modules: Array<{ id: string; name: string; responsibility: string; dependencies: string[] }>;
+  modules: Array<{
+    id: string;
+    name: string;
+    responsibility: string;
+    dependencies: string[];
+  }>;
   dataModels: Array<{
     name: string;
-    fields: Array<{ name: string; type: string; required: boolean; description: string }>;
+    fields: Array<{
+      name: string;
+      type: string;
+      required: boolean;
+      description: string;
+    }>;
   }>;
-  apis: Array<{ method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; description: string; request?: string; response?: string }>;
+  apis: Array<{
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    path: string;
+    description: string;
+    request?: string;
+    response?: string;
+  }>;
   risks: RiskRecord[];
 }
 
@@ -109,15 +145,28 @@ export interface DecisionRecord {
   createdAt: number;
 }
 
+export interface RiskRecord {
+  id: string;
+  risk: string;
+  impact: 'low' | 'medium' | 'high';
+  mitigation: string;
+}
+
 export interface ChangeProposal {
   id: string;
-  type: 'fix' | 'idea' | 'conflict' | 'reset' | 'freeze' | 'generate';
+  type: ChangeType;
   summary: string;
   userIntent: string;
   impactTargets: ImpactTarget[];
   impactLevel: 'low' | 'medium' | 'high';
   reason: string;
-  proposedChanges: Array<{ target: ImpactTarget; before: string; after: string; reason: string }>;
+  proposedChanges: Array<{
+    target: ImpactTarget;
+    before: string;
+    after: string;
+    reason: string;
+  }>;
+  proposedDocuments: Partial<Pick<Session, 'constitution' | 'requirement' | 'tech' | 'acceptance' | 'prototype' | 'taskPlan' | 'openQuestions' | 'risks' | 'decisions'>>;
   conflicts: string[];
   requiresConfirmation: boolean;
   createdAt: number;
@@ -136,14 +185,14 @@ export interface VersionSnapshot {
   version: number;
   proposalId: string | null;
   summary: string;
+  constitution: RequirementConstitution;
+  requirement: RequirementDoc | null;
+  tech: TechDoc | null;
+  acceptance: AcceptanceDoc | null;
+  prototype: PrototypeDoc | null;
+  taskPlan: TaskPlanDoc | null;
   qualityReport: QualityReport | null;
   createdAt: number;
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: number;
 }
 
 export interface Session {
@@ -168,4 +217,18 @@ export interface Session {
   snapshots: VersionSnapshot[];
   createdAt: number;
   updatedAt: number;
+}
+
+export interface AssistantTurnResult {
+  message: string;
+  suggestedQuestions: string[];
+  proposal: ChangeProposal | null;
+  qualityReport: QualityReport | null;
+  recommendedAction:
+    | 'answer_questions'
+    | 'accept_proposal'
+    | 'generate_docs'
+    | 'generate_prototype'
+    | 'run_quality_check'
+    | 'freeze';
 }
