@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DOC_TAB_LABELS, generatePrototype } from '../api';
 import { useAppStore } from '../store';
 import type { DocTab } from '../types';
@@ -19,8 +19,6 @@ export default function DocPreview() {
 
   if (!session) return null;
 
-  const tabs: DocTab[] = ['constitution', 'requirement', 'tech', 'acceptance', 'prototype', 'taskPlan'];
-
   const hasContent = (tab: DocTab) => {
     switch (tab) {
       case 'constitution': return !!session.constitution;
@@ -31,6 +29,24 @@ export default function DocPreview() {
       case 'taskPlan': return !!session.taskPlan;
     }
   };
+
+  const tabs = useMemo<DocTab[]>(() => {
+    const generated: DocTab[] = ['constitution'];
+    if (session.requirement) generated.push('requirement');
+    if (session.tech) generated.push('tech');
+    if (session.acceptance) generated.push('acceptance');
+    if (session.prototype?.html) generated.push('prototype');
+    if (session.taskPlan) generated.push('taskPlan');
+    return generated;
+  }, [session]);
+
+  const activeTab = tabs.includes(docTab) ? docTab : tabs[0];
+
+  useEffect(() => {
+    if (!tabs.includes(docTab)) {
+      setDocTab(tabs[0]);
+    }
+  }, [docTab, setDocTab, tabs]);
 
   const handleGeneratePrototype = async () => {
     if (loadingPrototype) return;
@@ -46,15 +62,15 @@ export default function DocPreview() {
   };
 
   const renderContent = () => {
-    switch (docTab) {
+    switch (activeTab) {
       case 'constitution':
         return <ConstitutionView doc={session.constitution} />;
       case 'requirement':
-        return session.requirement ? <RequirementView doc={session.requirement} /> : <EmptyState text="接受需求提案后生成正式需求文档" />;
+        return session.requirement ? <RequirementView doc={session.requirement} /> : null;
       case 'tech':
-        return session.tech ? <TechView doc={session.tech} /> : <EmptyState text="使用 /generate-tech 生成技术方案提案" />;
+        return session.tech ? <TechView doc={session.tech} /> : null;
       case 'acceptance':
-        return session.acceptance ? <AcceptanceView doc={session.acceptance} /> : <EmptyState text="使用 /generate-acceptance 生成验收标准提案" />;
+        return session.acceptance ? <AcceptanceView doc={session.acceptance} /> : null;
       case 'prototype':
         return session.prototype?.html ? (
           <PrototypeView html={session.prototype.html} pages={session.prototype.pages} />
@@ -65,19 +81,19 @@ export default function DocPreview() {
           />
         );
       case 'taskPlan':
-        return session.taskPlan ? <TaskPlanView doc={session.taskPlan} /> : <EmptyState text="生成验收标准或冻结时会形成任务拆解" />;
+        return session.taskPlan ? <TaskPlanView doc={session.taskPlan} /> : null;
     }
   };
 
   return (
     <div className="flex flex-col h-full bg-[#0b0f15]">
-      <div className="grid grid-cols-3 gap-1 p-2 border-b border-white/10 shrink-0">
+      <div className="flex gap-1 p-2 border-b border-white/10 shrink-0 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setDocTab(tab)}
-            className={`px-3 py-2.5 text-xs font-medium transition-all relative rounded-md border
-              ${docTab === tab ? 'text-cyan-200 bg-cyan-400/10 border-cyan-400/20' : 'text-gray-500 hover:text-gray-300 border-transparent hover:bg-white/[0.03]'}
+            className={`px-3 py-2 text-xs font-medium transition-all relative rounded-md border whitespace-nowrap
+              ${activeTab === tab ? 'text-cyan-200 bg-cyan-400/10 border-cyan-400/20' : 'text-gray-500 hover:text-gray-300 border-transparent hover:bg-white/[0.03]'}
             `}
           >
             <span>{DOC_TAB_LABELS[tab]}</span>

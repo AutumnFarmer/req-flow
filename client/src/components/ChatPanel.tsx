@@ -23,9 +23,64 @@ export default function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [session?.messages, streamingContent]);
 
+  const runDirectCommand = (cmd: string) => {
+    if (!session) return true;
+    if (cmd === '/accept') {
+      if (!session.pendingProposal) return true;
+      acceptProposal(session.id, session.pendingProposal.id)
+        .then(setSession)
+        .catch((err) => setError(err.message));
+      return true;
+    }
+    if (cmd === '/reject') {
+      if (!session.pendingProposal) return true;
+      rejectProposal(session.id, session.pendingProposal.id)
+        .then(setSession)
+        .catch((err) => setError(err.message));
+      return true;
+    }
+    if (cmd === '/generate-prototype') {
+      generatePrototype(session.id)
+        .then(setSession)
+        .catch((err) => setError(err.message));
+      return true;
+    }
+    return false;
+  };
+
+  const parseSlashCommand = (raw: string) => {
+    if (!raw.startsWith('/')) return null;
+    const [cmd, ...rest] = raw.split(/\s+/);
+    const payload = rest.join(' ').trim();
+    const mapping: Record<string, { command: string; message: string }> = {
+      '/reset': { command: 'reset', message: payload || '推翻重来，重新开始' },
+      '/review': { command: 'review', message: payload || '审阅当前状态' },
+      '/quality': { command: 'quality', message: payload || '运行质量检查' },
+      '/freeze': { command: 'freeze', message: payload || '冻结需求' },
+      '/generate-tech': { command: 'generate-tech', message: payload || '生成技术方案' },
+      '/generate-acceptance': { command: 'generate-acceptance', message: payload || '生成验收标准' },
+      '/fix': { command: 'fix', message: payload || '微调当前需求' },
+      '/idea': { command: 'idea', message: payload || '补充一个新想法' },
+    };
+    return mapping[cmd] || null;
+  };
+
   const handleSend = async (message?: string, command?: string) => {
-    const msg = message || input.trim();
+    let msg = message || input.trim();
     if (!msg || !session || isStreaming) return;
+
+    if (!command && msg.startsWith('/')) {
+      const directCmd = msg.split(/\s+/)[0];
+      if (runDirectCommand(directCmd)) {
+        setInput('');
+        return;
+      }
+      const parsed = parseSlashCommand(msg);
+      if (parsed) {
+        msg = parsed.message;
+        command = parsed.command;
+      }
+    }
 
     setInput('');
     setStreamingContent('');
@@ -62,21 +117,8 @@ export default function ChatPanel() {
 
   const handleCommand = (cmd: string) => {
     if (!session) return;
-    if (cmd === '/accept') {
-      if (!session.pendingProposal) return;
-      acceptProposal(session.id, session.pendingProposal.id)
-        .then(setSession)
-        .catch((err) => setError(err.message));
-    } else if (cmd === '/reject') {
-      if (!session.pendingProposal) return;
-      rejectProposal(session.id, session.pendingProposal.id)
-        .then(setSession)
-        .catch((err) => setError(err.message));
-    } else if (cmd === '/generate-prototype') {
-      generatePrototype(session.id)
-        .then(setSession)
-        .catch((err) => setError(err.message));
-    } else if (cmd === '/reset') {
+    if (runDirectCommand(cmd)) return;
+    if (cmd === '/reset') {
       handleSend('推翻重来，重新开始', 'reset');
     } else if (cmd === '/review') {
       handleSend('审阅当前状态', 'review');
@@ -121,7 +163,7 @@ export default function ChatPanel() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="bg-[#10151d] border border-white/10 rounded-lg p-4">
-                <div className="markdown-body text-sm">
+                <div className="markdown-body text-[13px] leading-5">
                   <ReactMarkdown>{cleanContent(streamingContent)}</ReactMarkdown>
                 </div>
                 <span className="inline-block w-1.5 h-4 bg-cyan-300 animate-pulse ml-0.5" />
@@ -149,7 +191,7 @@ export default function ChatPanel() {
       </div>
 
       {/* Command bar */}
-      <div className="px-6 py-2 border-t border-white/10 bg-[#0b0f15]">
+      <div className="px-5 py-2 border-t border-white/10 bg-[#0b0f15]">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {[
             { cmd: '/review', label: '审阅' },
@@ -165,7 +207,7 @@ export default function ChatPanel() {
             <button
               key={item.cmd}
               onClick={() => handleCommand(item.cmd)}
-              disabled={isStreaming}
+              disabled={isStreaming || ((item.cmd === '/accept' || item.cmd === '/reject') && !session.pendingProposal)}
               className="px-3 py-1.5 bg-white/[0.03] border border-white/10 rounded-md text-xs text-gray-400 hover:text-gray-100 hover:border-cyan-400/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all whitespace-nowrap"
             >
               {item.label}
@@ -175,20 +217,20 @@ export default function ChatPanel() {
       </div>
 
       {/* Input */}
-      <div className="px-6 py-4 border-t border-white/10 bg-[#0b0f15]">
+      <div className="px-5 py-3 border-t border-white/10 bg-[#0b0f15]">
         <div className="flex gap-3">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isStreaming ? 'AI 正在思考...' : '输入消息或命令（如 /fix 首页布局不对）'}
+            placeholder={isStreaming ? '正在生成...' : '输入反馈或命令，例如 /generate-tech、/fix 首页太复杂'}
             disabled={isStreaming}
-            className="flex-1 bg-[#080b10] border border-white/10 rounded-md px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/10 transition-all disabled:opacity-50"
+            className="flex-1 bg-[#080b10] border border-white/10 rounded-md px-3.5 py-2.5 text-[13px] text-gray-100 placeholder-gray-600 focus:outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/10 transition-all disabled:opacity-50"
           />
           <button
             onClick={() => handleSend()}
             disabled={isStreaming || !input.trim()}
-            className="px-5 py-3 bg-cyan-500 hover:bg-cyan-400 disabled:bg-gray-800 disabled:text-gray-500 text-slate-950 rounded-md text-sm font-semibold transition-all"
+            className="px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 disabled:bg-gray-800 disabled:text-gray-500 text-slate-950 rounded-md text-sm font-semibold transition-all"
           >
             发送
           </button>
@@ -221,7 +263,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           className={`inline-block rounded-lg p-4 text-left shadow-sm
             ${isUser ? 'bg-sky-400/10 border border-sky-400/20' : 'bg-[#10151d] border border-white/10'}`}
         >
-          <div className="markdown-body text-sm">
+          <div className="markdown-body text-[13px] leading-5">
             <ReactMarkdown>{content}</ReactMarkdown>
           </div>
         </div>

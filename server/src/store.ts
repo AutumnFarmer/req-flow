@@ -675,7 +675,13 @@ export function runQualityCheck(session: Session, targetStage: Stage = session.s
 
   const score = Math.max(0, Math.min(100, 100 - blockers.length * 25 - warnings.length * 8));
   if (nextActions.length === 0) {
-    nextActions.push(blockers.length > 0 ? '先处理阻断项' : '可以继续生成技术方案、验收标准或发起冻结');
+    if (blockers.length > 0) {
+      nextActions.push('先处理阻断项');
+    } else if (targetStage === 'frozen') {
+      nextActions.push('规格包已冻结，可以导出或创建新版本继续迭代');
+    } else {
+      nextActions.push('可以继续生成技术方案、验收标准或发起冻结');
+    }
   }
 
   return {
