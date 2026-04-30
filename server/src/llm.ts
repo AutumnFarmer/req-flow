@@ -8,6 +8,7 @@ const impactLevelSchema = z.enum(['low', 'medium', 'high']);
 const questionImpactSchema = z.enum(['low', 'medium', 'high']);
 
 const stringList = z.array(z.string().min(1)).default([]);
+const optionalString = z.preprocess((value) => value === null ? undefined : value, z.string().min(1).optional());
 
 const constitutionSchema = z.object({
   productName: z.string().min(1),
@@ -81,7 +82,7 @@ const techSchema = z.object({
   techStack: z.array(z.object({
     tech: z.string().min(1),
     reason: z.string().min(1),
-    risk: z.string().optional(),
+    risk: optionalString,
   })).min(1),
   modules: z.array(z.object({
     id: z.string().min(1),
@@ -102,8 +103,8 @@ const techSchema = z.object({
     method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
     path: z.string().min(1),
     description: z.string().min(1),
-    request: z.string().optional(),
-    response: z.string().optional(),
+    request: optionalString,
+    response: optionalString,
   })).min(1),
   risks: z.array(riskRecordSchema).default([]),
 });
@@ -117,7 +118,7 @@ const acceptanceSchema = z.object({
       given: z.string().min(1),
       when: z.string().min(1),
       then: z.string().min(1),
-      boundary: z.string().optional(),
+      boundary: optionalString,
       priority: z.enum(['must', 'should', 'could']),
     })).min(1),
   })).min(1),
@@ -135,7 +136,7 @@ const taskPlanSchema = z.object({
 });
 
 const openQuestionSchema = z.object({
-  id: z.string().optional(),
+  id: optionalString,
   question: z.string().min(1),
   impact: questionImpactSchema.default('medium'),
   status: z.enum(['open', 'answered', 'dismissed']).default('open'),
@@ -341,6 +342,9 @@ function buildUserPrompt(session: Session, message: string, command: string | un
     '输出必须符合这个顶层结构：',
     JSON.stringify(OUTPUT_CONTRACT, null, 2),
     '',
+    '完整文档字段模板如下。字段名必须完全一致，不能改名，不能省略 requiredDocuments 对应对象里的字段：',
+    JSON.stringify(DOCUMENT_SHAPES, null, 2),
+    '',
     '关键要求：',
     '- proposedDocuments 必须包含 generationPlan.requiredDocuments 列出的全部文档。',
     '- 所有内容使用中文，避免空泛措辞，功能、边界、验收和任务都要能落地。',
@@ -381,6 +385,153 @@ const OUTPUT_CONTRACT = {
     conflicts: ['如没有冲突，返回空数组'],
   },
   suggestedQuestions: ['建议用户下一步回答的问题'],
+};
+
+const DOCUMENT_SHAPES = {
+  constitution: {
+    productName: '产品名称',
+    oneSentence: '一句话说明产品要解决什么问题',
+    targetUsers: ['核心用户'],
+    coreValue: '核心价值',
+    primaryScenario: '最高频主场景',
+    successCriteria: ['可衡量成功标准'],
+    nonGoals: ['第一版明确不做的事'],
+    lockedDecisions: ['已经锁定的决策'],
+  },
+  requirement: {
+    overview: {
+      background: '背景',
+      problem: '要解决的问题',
+      goal: '本版本目标',
+    },
+    users: [
+      {
+        name: '用户名称',
+        description: '用户描述',
+        painPoints: ['痛点'],
+      },
+    ],
+    scenarios: [
+      {
+        name: '场景名称',
+        trigger: '触发条件',
+        userGoal: '用户目标',
+        mainFlow: ['步骤 1', '步骤 2'],
+        exceptions: ['异常或边界情况'],
+      },
+    ],
+    scope: {
+      inScope: ['本版包含'],
+      outOfScope: ['本版不做'],
+    },
+    features: [
+      {
+        id: 'F-001',
+        priority: 'P0',
+        name: '功能名称',
+        description: '功能描述',
+        userValue: '用户价值',
+        relatedScenarios: ['场景名称'],
+      },
+    ],
+    businessRules: [
+      {
+        id: 'R-001',
+        rule: '业务规则',
+        reason: '规则原因',
+      },
+    ],
+    nonFunctional: {
+      performance: ['性能要求'],
+      security: ['安全要求'],
+      usability: ['易用性要求'],
+      compatibility: ['兼容性要求'],
+    },
+    assumptions: ['前提假设'],
+    openQuestions: ['仍需确认的问题'],
+  },
+  tech: {
+    architecture: {
+      style: '架构风格',
+      rationale: '选择原因',
+      constraints: ['约束'],
+    },
+    techStack: [
+      {
+        tech: '技术名称',
+        reason: '选择原因',
+        risk: '可选风险',
+      },
+    ],
+    modules: [
+      {
+        id: 'M-001',
+        name: '模块名称',
+        responsibility: '模块职责',
+        dependencies: ['依赖模块或服务'],
+      },
+    ],
+    dataModels: [
+      {
+        name: '模型名称',
+        fields: [
+          {
+            name: '字段名',
+            type: '字段类型',
+            required: true,
+            description: '字段说明',
+          },
+        ],
+      },
+    ],
+    apis: [
+      {
+        method: 'POST',
+        path: '/api/example',
+        description: '接口说明',
+        request: '请求说明',
+        response: '响应说明',
+      },
+    ],
+    risks: [
+      {
+        id: 'RSK-001',
+        risk: '技术风险',
+        impact: 'medium',
+        mitigation: '缓解方式',
+      },
+    ],
+  },
+  acceptance: {
+    featureCases: [
+      {
+        featureId: 'F-001',
+        cases: [
+          {
+            id: 'F-001-C1',
+            scenario: '验收场景',
+            given: '前置条件',
+            when: '用户行为',
+            then: '系统结果',
+            boundary: '边界情况',
+            priority: 'must',
+          },
+        ],
+      },
+    ],
+    releaseChecklist: ['发布前检查项'],
+  },
+  taskPlan: {
+    tasks: [
+      {
+        id: 'T-001',
+        title: '任务标题',
+        description: '任务说明',
+        dependsOn: [],
+        acceptanceRefs: ['F-001-C1'],
+      },
+    ],
+  },
 };
 
 function parseJsonObject(content: string): unknown {
