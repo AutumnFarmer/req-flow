@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DOC_TAB_LABELS, generatePrototype } from '../api';
+import { acceptProposal, DOC_TAB_LABELS, generatePrototype } from '../api';
 import { useAppStore } from '../store';
 import type { DocTab } from '../types';
 import AcceptanceView from './AcceptanceView';
@@ -19,28 +19,45 @@ export default function DocPreview() {
 
   if (!session) return null;
 
-  const hasContent = (tab: DocTab) => {
+  const proposedDocs = session.pendingProposal?.proposedDocuments;
+  const getDoc = (tab: DocTab) => {
     switch (tab) {
-      case 'constitution': return !!session.constitution;
-      case 'requirement': return !!session.requirement;
-      case 'tech': return !!session.tech;
-      case 'acceptance': return !!session.acceptance;
-      case 'prototype': return !!session.prototype?.html;
-      case 'taskPlan': return !!session.taskPlan;
+      case 'constitution': return proposedDocs?.constitution || session.constitution;
+      case 'requirement': return proposedDocs?.requirement || session.requirement;
+      case 'tech': return proposedDocs?.tech || session.tech;
+      case 'acceptance': return proposedDocs?.acceptance || session.acceptance;
+      case 'prototype': return proposedDocs?.prototype || session.prototype;
+      case 'taskPlan': return proposedDocs?.taskPlan || session.taskPlan;
     }
+  };
+
+  const isDraftTab = (tab: DocTab) => {
+    switch (tab) {
+      case 'constitution': return !!proposedDocs?.constitution;
+      case 'requirement': return !!proposedDocs?.requirement;
+      case 'tech': return !!proposedDocs?.tech;
+      case 'acceptance': return !!proposedDocs?.acceptance;
+      case 'prototype': return !!proposedDocs?.prototype;
+      case 'taskPlan': return !!proposedDocs?.taskPlan;
+    }
+  };
+
+  const hasContent = (tab: DocTab) => {
+    const doc = getDoc(tab);
+    return tab === 'prototype' ? !!doc && 'html' in doc && !!doc.html : !!doc;
   };
 
   const tabs = useMemo<DocTab[]>(() => {
     const generated: DocTab[] = ['constitution'];
-    if (session.requirement) generated.push('requirement');
-    if (session.tech) generated.push('tech');
-    if (session.acceptance) generated.push('acceptance');
-    if (session.prototype?.html) generated.push('prototype');
-    if (session.taskPlan) generated.push('taskPlan');
+    const candidates: DocTab[] = ['requirement', 'tech', 'acceptance', 'prototype', 'taskPlan'];
+    candidates.forEach((tab) => {
+      if (hasContent(tab)) generated.push(tab);
+    });
     return generated;
   }, [session]);
 
   const activeTab = tabs.includes(docTab) ? docTab : tabs[0];
+  const activeIsDraft = isDraftTab(activeTab);
 
   useEffect(() => {
     if (!tabs.includes(docTab)) {
@@ -61,19 +78,30 @@ export default function DocPreview() {
     }
   };
 
+  const handleAcceptProposal = async () => {
+    if (!session.pendingProposal) return;
+    try {
+      const updated = await acceptProposal(session.id, session.pendingProposal.id);
+      setSession(updated);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const renderContent = () => {
+    const doc = getDoc(activeTab);
     switch (activeTab) {
       case 'constitution':
-        return <ConstitutionView doc={session.constitution} />;
+        return doc ? <ConstitutionView doc={doc as any} /> : null;
       case 'requirement':
-        return session.requirement ? <RequirementView doc={session.requirement} /> : null;
+        return doc ? <RequirementView doc={doc as any} /> : null;
       case 'tech':
-        return session.tech ? <TechView doc={session.tech} /> : null;
+        return doc ? <TechView doc={doc as any} /> : null;
       case 'acceptance':
-        return session.acceptance ? <AcceptanceView doc={session.acceptance} /> : null;
+        return doc ? <AcceptanceView doc={doc as any} /> : null;
       case 'prototype':
-        return session.prototype?.html ? (
-          <PrototypeView html={session.prototype.html} pages={session.prototype.pages} />
+        return doc && 'html' in doc && doc.html ? (
+          <PrototypeView html={doc.html} pages={doc.pages} />
         ) : (
           <EmptyState
             text={session.requirement ? '基于当前需求生成 sandbox 原型' : '需要先接受需求文档提案'}
@@ -81,7 +109,7 @@ export default function DocPreview() {
           />
         );
       case 'taskPlan':
-        return session.taskPlan ? <TaskPlanView doc={session.taskPlan} /> : null;
+        return doc ? <TaskPlanView doc={doc as any} /> : null;
     }
   };
 
@@ -97,10 +125,32 @@ export default function DocPreview() {
             `}
           >
             <span>{DOC_TAB_LABELS[tab]}</span>
-            {hasContent(tab) && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-cyan-300 inline-block" />}
+            {isDraftTab(tab) ? (
+              <span className="ml-1.5 rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] text-amber-200">草案</span>
+            ) : (
+              hasContent(tab) && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-cyan-300 inline-block" />
+            )}
           </button>
         ))}
       </div>
+      {activeIsDraft && session.pendingProposal && (
+        <div className="border-b border-amber-400/20 bg-amber-400/10 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-amber-200">草案预览，尚未写入正式文档</div>
+              <p className="mt-1 text-[11px] leading-4 text-amber-100/70">
+                这是待确认提案里的内容。接受提案后，它才会进入版本快照并成为正式文档。
+              </p>
+            </div>
+            <button
+              onClick={handleAcceptProposal}
+              className="shrink-0 rounded-md bg-amber-300 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-200 transition-colors"
+            >
+              接受提案
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto">{renderContent()}</div>
     </div>
   );

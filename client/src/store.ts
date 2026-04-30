@@ -25,7 +25,14 @@ export const useAppStore = create<AppState>((set) => ({
   isStreaming: false,
   error: null,
 
-  setSession: (session) => set({ session }),
+  setSession: (session) => {
+    if (session) {
+      window.localStorage.setItem('reqflow:lastSessionId', session.id);
+    } else {
+      window.localStorage.removeItem('reqflow:lastSessionId');
+    }
+    set({ session });
+  },
   setDocTab: (docTab) => set({ docTab }),
   setStreamingContent: (streamingContent) => set({ streamingContent }),
   appendStreamingContent: (content) =>

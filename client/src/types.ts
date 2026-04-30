@@ -118,6 +118,7 @@ export interface ChangeProposal {
   impactLevel: 'low' | 'medium' | 'high';
   reason: string;
   proposedChanges: Array<{ target: ImpactTarget; before: string; after: string; reason: string }>;
+  proposedDocuments: Partial<Pick<Session, 'constitution' | 'requirement' | 'tech' | 'acceptance' | 'prototype' | 'taskPlan' | 'openQuestions' | 'risks' | 'decisions'>>;
   conflicts: string[];
   requiresConfirmation: boolean;
   createdAt: number;
