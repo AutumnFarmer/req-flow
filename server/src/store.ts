@@ -1,8 +1,9 @@
 import { v4 as uuid } from 'uuid';
-import { getSession as readSession, saveSession, saveSnapshot, getSnapshot } from './db.js';
+import { getSession as readSession, listSessions as readSessions, saveSession, saveSnapshot, getSnapshot } from './db.js';
 import type {
   AcceptanceDoc,
   AssistantTurnResult,
+  AuditAction,
   ChangeProposal,
   ChatMessage,
   DecisionRecord,
@@ -13,7 +14,9 @@ import type {
   RequirementConstitution,
   RequirementDoc,
   RiskRecord,
+  ReviewStatus,
   Session,
+  SessionSummary,
   Stage,
   TaskPlanDoc,
   TechDoc,
@@ -65,10 +68,11 @@ function initialQuestions(): OpenQuestion[] {
   ];
 }
 
-export function createSession(idea: string): Session {
+export function createSession(idea: string, actor = 'system', workspaceId = 'default'): Session {
   const timestamp = now();
   const session: Session = {
     id: uuid(),
+    workspaceId: workspaceId.trim() || 'default',
     title: shortTitle(idea),
     originalIdea: idea.trim(),
     stage: 'clarify',
@@ -87,10 +91,16 @@ export function createSession(idea: string): Session {
     qualityReport: null,
     messages: [],
     snapshots: [],
+    auditEvents: [],
+    reviews: [],
     createdAt: timestamp,
     updatedAt: timestamp,
   };
 
+  recordAuditEvent(session, 'session.created', '创建需求分析会话', {
+    originalIdeaLength: session.originalIdea.length,
+    workspaceId: session.workspaceId,
+  }, actor);
   session.qualityReport = runQualityCheck(session);
   saveSession(session);
   createSnapshot(session, null, '创建会话');
@@ -99,7 +109,27 @@ export function createSession(idea: string): Session {
 }
 
 export function getSession(id: string): Session | undefined {
-  return readSession(id);
+  const session = readSession(id);
+  return session ? ensureSessionDefaults(session) : undefined;
+}
+
+export function listSessionSummaries(workspaceId = 'default'): SessionSummary[] {
+  return readSessions()
+    .map((session) => ensureSessionDefaults(session))
+    .filter((session) => session.workspaceId === workspaceId)
+    .map((session) => ({
+      id: session.id,
+      workspaceId: session.workspaceId,
+      title: session.title,
+      originalIdea: session.originalIdea,
+      stage: session.stage,
+      runtimeState: session.runtimeState,
+      currentVersion: session.currentVersion,
+      qualityScore: session.qualityReport?.score ?? null,
+      pendingProposal: Boolean(session.pendingProposal),
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    }));
 }
 
 export function persist(session: Session) {
@@ -109,6 +139,34 @@ export function persist(session: Session) {
 
 export function addMessage(session: Session, role: ChatMessage['role'], content: string) {
   session.messages.push({ role, content, timestamp: now() });
+}
+
+export function recordAuditEvent(
+  session: Session,
+  action: AuditAction,
+  summary: string,
+  metadata: Record<string, string | number | boolean | null> = {},
+  actor = 'system',
+) {
+  ensureSessionDefaults(session);
+  session.auditEvents.push({
+    id: uuid(),
+    action,
+    actor: actor.trim() || 'system',
+    summary,
+    metadata,
+    createdAt: now(),
+  });
+  if (session.auditEvents.length > 500) {
+    session.auditEvents = session.auditEvents.slice(-500);
+  }
+}
+
+function ensureSessionDefaults(session: Session): Session {
+  session.workspaceId ||= 'default';
+  session.auditEvents ||= [];
+  session.reviews ||= [];
+  return session;
 }
 
 function createSnapshot(session: Session, proposalId: string | null, summary: string) {
@@ -533,7 +591,7 @@ export function handleAssistantTurn(session: Session, message: string, command?:
   };
 }
 
-export function acceptProposal(session: Session, proposalId: string): Session {
+export function acceptProposal(session: Session, proposalId: string, actor = 'system'): Session {
   const proposal = session.pendingProposal;
   if (!proposal || proposal.id !== proposalId) {
     throw new Error('没有可接受的当前提案');
@@ -548,6 +606,9 @@ export function acceptProposal(session: Session, proposalId: string): Session {
   if (docs.prototype !== undefined) session.prototype = docs.prototype;
   if (docs.taskPlan !== undefined) session.taskPlan = docs.taskPlan;
   if (docs.openQuestions !== undefined) session.openQuestions = docs.openQuestions;
+  if (docs.openQuestions === undefined && docs.requirement !== undefined) {
+    session.openQuestions = syncOpenQuestionsFromRequirement(docs.requirement, session.openQuestions);
+  }
   if (docs.risks !== undefined) session.risks = docs.risks;
   if (docs.decisions !== undefined) session.decisions = docs.decisions;
 
@@ -575,11 +636,18 @@ export function acceptProposal(session: Session, proposalId: string): Session {
   session.runtimeState = session.qualityReport.blockers.length > 0 ? 'blocked' : 'idle';
   addMessage(session, 'assistant', `已接受提案：${proposal.summary}。我保存了 v${session.currentVersion} 快照。`);
   createSnapshot(session, proposal.id, proposal.summary);
+  recordAuditEvent(session, 'proposal.accepted', `接受提案：${proposal.summary}`, {
+    proposalId: proposal.id,
+    proposalType: proposal.type,
+    impactLevel: proposal.impactLevel,
+    currentVersion: session.currentVersion,
+    targetCount: proposal.impactTargets.length,
+  }, actor);
   persist(session);
   return session;
 }
 
-export function rejectProposal(session: Session, proposalId: string): Session {
+export function rejectProposal(session: Session, proposalId: string, actor = 'system'): Session {
   if (!session.pendingProposal || session.pendingProposal.id !== proposalId) {
     throw new Error('没有可拒绝的当前提案');
   }
@@ -587,11 +655,54 @@ export function rejectProposal(session: Session, proposalId: string): Session {
   session.pendingProposal = null;
   session.runtimeState = 'idle';
   addMessage(session, 'assistant', `已拒绝提案：${summary}。正式文档没有变化。`);
+  recordAuditEvent(session, 'proposal.rejected', `拒绝提案：${summary}`, {
+    proposalId,
+  }, actor);
   persist(session);
   return session;
 }
 
-export function rollbackToSnapshot(session: Session, version: number): Session {
+export function submitReview(
+  session: Session,
+  status: ReviewStatus,
+  comment: string,
+  role = 'reviewer',
+  actor = 'system',
+): Session {
+  ensureSessionDefaults(session);
+  if (!['approved', 'rejected'].includes(status)) {
+    throw new Error('无效的评审状态');
+  }
+  if (!session.requirement) {
+    throw new Error('还没有正式需求文档，无法提交评审');
+  }
+
+  const review = {
+    id: uuid(),
+    version: session.currentVersion,
+    status,
+    actor: actor.trim() || 'system',
+    role: role.trim() || 'reviewer',
+    comment: comment.trim(),
+    createdAt: now(),
+  };
+  session.reviews.push(review);
+  if (session.reviews.length > 200) {
+    session.reviews = session.reviews.slice(-200);
+  }
+  session.qualityReport = runQualityCheck(session);
+  session.runtimeState = session.qualityReport.blockers.length > 0 ? 'blocked' : 'idle';
+  recordAuditEvent(session, 'review.submitted', `提交评审：${status === 'approved' ? '通过' : '打回'}`, {
+    reviewId: review.id,
+    version: review.version,
+    status: review.status,
+    role: review.role,
+  }, actor);
+  persist(session);
+  return session;
+}
+
+export function rollbackToSnapshot(session: Session, version: number, actor = 'system'): Session {
   const snapshot = getSnapshot(session.id, version) || session.snapshots.find((item) => item.version === version);
   if (!snapshot) {
     throw new Error('目标版本不存在');
@@ -611,6 +722,10 @@ export function rollbackToSnapshot(session: Session, version: number): Session {
   session.runtimeState = session.qualityReport.blockers.length > 0 ? 'blocked' : 'idle';
   addMessage(session, 'assistant', `已从 v${version} 回滚，并保存为新的 v${session.currentVersion}。`);
   createSnapshot(session, null, `回滚到 v${version}`);
+  recordAuditEvent(session, 'snapshot.rolled_back', `回滚到 v${version}`, {
+    sourceVersion: version,
+    currentVersion: session.currentVersion,
+  }, actor);
   persist(session);
   return session;
 }
@@ -620,11 +735,40 @@ export function runQualityCheck(session: Session, targetStage: Stage = session.s
   const warnings: string[] = [];
   const passedChecks: string[] = [];
   const nextActions: string[] = [];
+  const addUnique = (target: string[], item: string) => {
+    if (!target.includes(item)) target.push(item);
+  };
 
   if (!session.constitution.oneSentence.trim()) {
     blockers.push('需求宪法缺少一句话定义');
   } else {
     passedChecks.push('需求宪法已有一句话定义');
+  }
+  if (session.constitution.nonGoals.length < 3) {
+    warnings.push('需求宪法不做项少于 3 条，企业交付时范围边界偏弱');
+  } else {
+    passedChecks.push('需求宪法已有明确范围边界');
+  }
+  if (targetStage === 'frozen' && hasPlaceholderText([
+    session.constitution.oneSentence,
+    session.constitution.coreValue,
+    session.constitution.primaryScenario,
+    ...session.constitution.targetUsers,
+  ])) {
+    blockers.push('冻结前需求宪法仍包含待确认占位内容');
+  }
+
+  const highOpenQuestions = session.openQuestions.filter((q) => q.status === 'open' && q.impact === 'high');
+  if (highOpenQuestions.length > 0) {
+    const message = `仍有 ${highOpenQuestions.length} 个高影响待确认问题`;
+    if (targetStage === 'review' || targetStage === 'frozen') {
+      blockers.push(message);
+      addUnique(nextActions, '先关闭高影响待确认问题');
+    } else {
+      warnings.push(message);
+    }
+  } else {
+    passedChecks.push('没有高影响待确认问题');
   }
 
   if (!session.requirement) {
@@ -643,6 +787,24 @@ export function runQualityCheck(session: Session, targetStage: Stage = session.s
     if (session.requirement.openQuestions.length > 0) {
       warnings.push(`仍有 ${session.requirement.openQuestions.length} 个待确认问题`);
     }
+    const featureIds = session.requirement.features.map((feature) => feature.id);
+    const duplicatedFeatureIds = findDuplicates(featureIds);
+    if (duplicatedFeatureIds.length > 0) {
+      blockers.push(`需求文档存在重复功能 ID：${duplicatedFeatureIds.join('、')}`);
+    } else {
+      passedChecks.push('功能 ID 唯一');
+    }
+    const scenarioNames = new Set(session.requirement.scenarios.map((scenario) => scenario.name));
+    const orphanFeatureRefs = session.requirement.features.flatMap((feature) =>
+      feature.relatedScenarios
+        .filter((scenario) => !scenarioNames.has(scenario))
+        .map((scenario) => `${feature.id} -> ${scenario}`),
+    );
+    if (orphanFeatureRefs.length > 0) {
+      warnings.push(`功能关联了不存在的场景：${orphanFeatureRefs.join('；')}`);
+    } else {
+      passedChecks.push('功能与场景引用一致');
+    }
   }
 
   if (targetStage === 'review' || targetStage === 'frozen') {
@@ -653,8 +815,12 @@ export function runQualityCheck(session: Session, targetStage: Stage = session.s
       passedChecks.push('已有验收标准');
     }
     if (!session.tech) {
-      warnings.push('还没有技术方案，开发交接风险较高');
-      nextActions.push('执行 /generate-tech 生成技术方案提案');
+      if (targetStage === 'frozen') {
+        blockers.push('冻结前需要技术方案');
+      } else {
+        warnings.push('还没有技术方案，开发交接风险较高');
+      }
+      addUnique(nextActions, '执行 /generate-tech 生成技术方案提案');
     } else {
       passedChecks.push('已有技术方案');
     }
@@ -671,6 +837,29 @@ export function runQualityCheck(session: Session, targetStage: Stage = session.s
     } else {
       passedChecks.push('已有任务拆解');
     }
+
+    const currentReviews = currentVersionReviews(session);
+    const rejectedReviews = currentReviews.filter((review) => review.status === 'rejected');
+    const approvedReviews = currentReviews.filter((review) => review.status === 'approved');
+    if (rejectedReviews.length > 0) {
+      blockers.push(`当前版本有 ${rejectedReviews.length} 条评审打回记录`);
+      addUnique(nextActions, '先处理评审打回意见并重新提交评审');
+    } else if (approvedReviews.length === 0) {
+      blockers.push('冻结前至少需要一条当前版本评审通过记录');
+      addUnique(nextActions, '请业务或产品负责人提交当前版本评审通过');
+    } else {
+      passedChecks.push('当前版本已有评审通过记录');
+    }
+  }
+
+  if (session.requirement && session.acceptance) {
+    validateAcceptanceConsistency(session.requirement, session.acceptance, targetStage, blockers, warnings, passedChecks, nextActions);
+  }
+  if (session.taskPlan) {
+    validateTaskPlanConsistency(session.taskPlan, session.acceptance, blockers, warnings, passedChecks);
+  }
+  if (session.tech) {
+    validateTechConsistency(session.tech, targetStage, blockers, warnings, passedChecks);
   }
 
   const score = Math.max(0, Math.min(100, 100 - blockers.length * 25 - warnings.length * 8));
@@ -694,6 +883,24 @@ export function runQualityCheck(session: Session, targetStage: Stage = session.s
   };
 }
 
+function currentVersionReviews(session: Session) {
+  ensureSessionDefaults(session);
+  return session.reviews.filter((review) => review.version === session.currentVersion);
+}
+
+function syncOpenQuestionsFromRequirement(requirement: RequirementDoc | null, currentQuestions: OpenQuestion[]) {
+  if (!requirement) return currentQuestions;
+  return requirement.openQuestions.map((question, index) => {
+    const existing = currentQuestions.find((item) => item.question === question);
+    return {
+      id: existing?.id || `REQ-Q-${String(index + 1).padStart(3, '0')}`,
+      question,
+      impact: existing?.impact || 'medium',
+      status: existing?.status || 'open',
+    };
+  });
+}
+
 function formatQualityReport(report: QualityReport) {
   const lines = [`质量检查完成，当前得分 ${report.score}/100。`];
   if (report.blockers.length) {
@@ -706,7 +913,141 @@ function formatQualityReport(report: QualityReport) {
   return lines.join('\n');
 }
 
-export function generatePrototype(session: Session): PrototypeDoc {
+function hasPlaceholderText(values: string[]) {
+  return values.some((value) => /待确认|TBD|TODO|未定|占位/.test(value));
+}
+
+function findDuplicates(values: string[]) {
+  const seen = new Set<string>();
+  const duplicated = new Set<string>();
+  values.forEach((value) => {
+    if (seen.has(value)) {
+      duplicated.add(value);
+    } else {
+      seen.add(value);
+    }
+  });
+  return [...duplicated];
+}
+
+function validateAcceptanceConsistency(
+  requirement: RequirementDoc,
+  acceptance: AcceptanceDoc,
+  targetStage: Stage,
+  blockers: string[],
+  warnings: string[],
+  passedChecks: string[],
+  nextActions: string[],
+) {
+  const featureIds = new Set(requirement.features.map((feature) => feature.id));
+  const acceptanceFeatureIds = new Set(acceptance.featureCases.map((group) => group.featureId));
+  const unknownFeatureIds = [...acceptanceFeatureIds].filter((featureId) => !featureIds.has(featureId));
+  if (unknownFeatureIds.length > 0) {
+    blockers.push(`验收标准引用了不存在的功能 ID：${unknownFeatureIds.join('、')}`);
+  }
+
+  const requiredPriorities = targetStage === 'frozen' ? new Set(['P0', 'P1']) : new Set(['P0']);
+  const missingCoverage = requirement.features
+    .filter((feature) => requiredPriorities.has(feature.priority))
+    .filter((feature) => {
+      const group = acceptance.featureCases.find((item) => item.featureId === feature.id);
+      return !group || group.cases.length === 0;
+    })
+    .map((feature) => `${feature.id} ${feature.name}`);
+
+  if (missingCoverage.length > 0) {
+    const message = `验收标准未覆盖关键功能：${missingCoverage.join('、')}`;
+    if (targetStage === 'review' || targetStage === 'frozen') {
+      blockers.push(message);
+      nextActions.push('补齐 P0/P1 功能的验收用例');
+    } else {
+      warnings.push(message);
+    }
+  } else {
+    passedChecks.push('关键功能已有验收覆盖');
+  }
+
+  const caseIds = acceptance.featureCases.flatMap((group) => group.cases.map((item) => item.id));
+  const duplicateCaseIds = findDuplicates(caseIds);
+  if (duplicateCaseIds.length > 0) {
+    blockers.push(`验收用例 ID 重复：${duplicateCaseIds.join('、')}`);
+  } else {
+    passedChecks.push('验收用例 ID 唯一');
+  }
+}
+
+function validateTaskPlanConsistency(
+  taskPlan: TaskPlanDoc,
+  acceptance: AcceptanceDoc | null,
+  blockers: string[],
+  warnings: string[],
+  passedChecks: string[],
+) {
+  const taskIds = taskPlan.tasks.map((task) => task.id);
+  const taskIdSet = new Set(taskIds);
+  const duplicateTaskIds = findDuplicates(taskIds);
+  if (duplicateTaskIds.length > 0) {
+    blockers.push(`任务 ID 重复：${duplicateTaskIds.join('、')}`);
+  } else {
+    passedChecks.push('任务 ID 唯一');
+  }
+
+  const missingDependencies = taskPlan.tasks.flatMap((task) =>
+    task.dependsOn
+      .filter((dependency) => !taskIdSet.has(dependency))
+      .map((dependency) => `${task.id} -> ${dependency}`),
+  );
+  if (missingDependencies.length > 0) {
+    blockers.push(`任务依赖不存在：${missingDependencies.join('；')}`);
+  } else {
+    passedChecks.push('任务依赖引用一致');
+  }
+
+  if (!acceptance) {
+    warnings.push('已有任务拆解但没有验收标准，任务无法追溯到可测试结果');
+    return;
+  }
+
+  const acceptanceCaseIds = new Set(acceptance.featureCases.flatMap((group) => group.cases.map((item) => item.id)));
+  const missingAcceptanceRefs = taskPlan.tasks.flatMap((task) =>
+    task.acceptanceRefs
+      .filter((acceptanceRef) => !acceptanceCaseIds.has(acceptanceRef))
+      .map((acceptanceRef) => `${task.id} -> ${acceptanceRef}`),
+  );
+  if (missingAcceptanceRefs.length > 0) {
+    blockers.push(`任务引用了不存在的验收用例：${missingAcceptanceRefs.join('；')}`);
+  } else {
+    passedChecks.push('任务可追溯到验收用例');
+  }
+}
+
+function validateTechConsistency(
+  tech: TechDoc,
+  targetStage: Stage,
+  blockers: string[],
+  warnings: string[],
+  passedChecks: string[],
+) {
+  const apiPaths = tech.apis.map((api) => api.path);
+  const duplicateApiPaths = findDuplicates(apiPaths);
+  if (duplicateApiPaths.length > 0) {
+    warnings.push(`技术方案存在重复 API 路径：${duplicateApiPaths.join('、')}`);
+  } else {
+    passedChecks.push('API 路径没有重复');
+  }
+
+  const invalidApiPaths = tech.apis.filter((api) => !api.path.startsWith('/')).map((api) => api.path);
+  if (invalidApiPaths.length > 0) {
+    blockers.push(`API 路径必须以 / 开头：${invalidApiPaths.join('、')}`);
+  }
+
+  const highRisks = tech.risks.filter((risk) => risk.impact === 'high');
+  if (targetStage === 'frozen' && highRisks.length > 0) {
+    warnings.push(`技术方案仍有 ${highRisks.length} 个高影响风险，需要在交付时显式跟踪`);
+  }
+}
+
+export function generatePrototype(session: Session, actor = 'system'): PrototypeDoc {
   const title = session.constitution.productName || session.title;
   const features = session.requirement?.features || [];
   const pages = ['工作台', '需求文档', '质量检查'];
@@ -758,6 +1099,10 @@ export function generatePrototype(session: Session): PrototypeDoc {
   session.currentVersion += 1;
   session.qualityReport = runQualityCheck(session);
   createSnapshot(session, null, '生成原型');
+  recordAuditEvent(session, 'prototype.generated', '生成原型预览', {
+    currentVersion: session.currentVersion,
+    pageCount: pages.length,
+  }, actor);
   persist(session);
   return session.prototype;
 }
@@ -766,30 +1111,229 @@ export function exportMarkdown(session: Session): string {
   const lines = [
     `# ${session.constitution.productName || session.title} 规格包`,
     '',
+    `工作区：${session.workspaceId || 'default'}`,
     `版本：v${session.currentVersion}`,
     `阶段：${session.stage}`,
+    `更新时间：${new Date(session.updatedAt).toISOString()}`,
     '',
     '## 需求宪法',
     '',
     `- 一句话：${session.constitution.oneSentence}`,
+    `- 目标用户：${session.constitution.targetUsers.join('、') || '暂无'}`,
     `- 核心价值：${session.constitution.coreValue}`,
     `- 核心场景：${session.constitution.primaryScenario}`,
     '',
-    '## 功能范围',
+    '### 成功标准',
     '',
-    ...(session.requirement?.features.map((feature) => `- [${feature.priority}] ${feature.name}: ${feature.description}`) || ['暂无']),
+    ...formatList(session.constitution.successCriteria),
+    '',
+    '### 不做项',
+    '',
+    ...formatList(session.constitution.nonGoals),
+    '',
+    '### 锁定决策',
+    '',
+    ...formatList(session.constitution.lockedDecisions),
+    '',
+    '## 需求文档',
+    '',
+    ...(session.requirement ? formatRequirement(session.requirement) : ['暂无正式需求文档']),
+    '',
+    '## 技术方案',
+    '',
+    ...(session.tech ? formatTech(session.tech) : ['暂无技术方案']),
     '',
     '## 验收标准',
     '',
-    ...(session.acceptance?.featureCases.flatMap((group) => group.cases.map((item) => `- ${item.scenario}: Given ${item.given}; When ${item.when}; Then ${item.then}`)) || ['暂无']),
+    ...(session.acceptance ? formatAcceptance(session.acceptance) : ['暂无验收标准']),
+    '',
+    '## 任务拆解',
+    '',
+    ...(session.taskPlan ? formatTaskPlan(session.taskPlan) : ['暂无任务拆解']),
+    '',
+    '## 风险记录',
+    '',
+    ...formatRisks([...session.risks, ...(session.tech?.risks || [])]),
+    '',
+    '## 决策记录',
+    '',
+    ...(session.decisions.length
+      ? session.decisions.map((item) => `- ${item.decision}：${item.reason}（${new Date(item.createdAt).toISOString()}）`)
+      : ['暂无决策记录']),
+    '',
+    '## 待确认问题',
+    '',
+    ...(session.openQuestions.length
+      ? session.openQuestions.map((item) => `- [${item.status}] [${item.impact}] ${item.question}`)
+      : ['暂无待确认问题']),
+    '',
+    '## 评审签核',
+    '',
+    ...(session.reviews.length
+      ? session.reviews.map((item) => `- v${item.version} [${item.status}] ${item.actor}（${item.role}）：${item.comment || '无备注'}（${new Date(item.createdAt).toISOString()}）`)
+      : ['暂无评审记录']),
+    '',
+    '## 审计日志',
+    '',
+    ...(session.auditEvents.length
+      ? session.auditEvents.map((item) => `- ${new Date(item.createdAt).toISOString()} [${item.actor}] ${item.action}：${item.summary}`)
+      : ['暂无审计日志']),
+    '',
+    '## 版本快照',
+    '',
+    ...(session.snapshots.length
+      ? session.snapshots.map((item) => `- v${item.version}：${item.summary}（${new Date(item.createdAt).toISOString()}）`)
+      : ['暂无版本快照']),
     '',
     '## 质量报告',
     '',
-    `得分：${session.qualityReport?.score ?? 0}/100`,
-    ...(session.qualityReport?.blockers.map((item) => `- 阻断：${item}`) || []),
-    ...(session.qualityReport?.warnings.map((item) => `- 提醒：${item}`) || []),
+    ...(session.qualityReport ? formatQualityMarkdown(session.qualityReport) : ['暂无质量报告']),
   ];
   return lines.join('\n');
+}
+
+function formatRequirement(requirement: RequirementDoc) {
+  return [
+    '### 概览',
+    '',
+    `- 背景：${requirement.overview.background}`,
+    `- 问题：${requirement.overview.problem}`,
+    `- 目标：${requirement.overview.goal}`,
+    '',
+    '### 用户',
+    '',
+    ...requirement.users.flatMap((user) => [
+      `- ${user.name}：${user.description}`,
+      ...user.painPoints.map((painPoint) => `  - 痛点：${painPoint}`),
+    ]),
+    '',
+    '### 场景',
+    '',
+    ...requirement.scenarios.flatMap((scenario) => [
+      `- ${scenario.name}`,
+      `  - 触发：${scenario.trigger}`,
+      `  - 目标：${scenario.userGoal}`,
+      `  - 主流程：${scenario.mainFlow.join(' -> ') || '暂无'}`,
+      `  - 异常：${scenario.exceptions.join('；') || '暂无'}`,
+    ]),
+    '',
+    '### 范围',
+    '',
+    '- 本版包含：',
+    ...formatList(requirement.scope.inScope, 2),
+    '- 本版不做：',
+    ...formatList(requirement.scope.outOfScope, 2),
+    '',
+    '### 功能',
+    '',
+    ...requirement.features.map((feature) => `- [${feature.priority}] ${feature.id} ${feature.name}：${feature.description}；用户价值：${feature.userValue}`),
+    '',
+    '### 业务规则',
+    '',
+    ...requirement.businessRules.map((rule) => `- ${rule.id}：${rule.rule}；原因：${rule.reason}`),
+    '',
+    '### 非功能需求',
+    '',
+    '- 性能：',
+    ...formatList(requirement.nonFunctional.performance, 2),
+    '- 安全：',
+    ...formatList(requirement.nonFunctional.security, 2),
+    '- 易用性：',
+    ...formatList(requirement.nonFunctional.usability, 2),
+    '- 兼容性：',
+    ...formatList(requirement.nonFunctional.compatibility, 2),
+    '',
+    '### 假设',
+    '',
+    ...formatList(requirement.assumptions),
+    '',
+    '### 需求内待确认问题',
+    '',
+    ...formatList(requirement.openQuestions),
+  ];
+}
+
+function formatTech(tech: TechDoc) {
+  return [
+    '### 架构',
+    '',
+    `- 风格：${tech.architecture.style}`,
+    `- 理由：${tech.architecture.rationale}`,
+    '- 约束：',
+    ...formatList(tech.architecture.constraints, 2),
+    '',
+    '### 技术栈',
+    '',
+    ...tech.techStack.map((item) => `- ${item.tech}：${item.reason}${item.risk ? `；风险：${item.risk}` : ''}`),
+    '',
+    '### 模块',
+    '',
+    ...tech.modules.map((module) => `- ${module.id} ${module.name}：${module.responsibility}；依赖：${module.dependencies.join('、') || '无'}`),
+    '',
+    '### 数据模型',
+    '',
+    ...tech.dataModels.flatMap((model) => [
+      `- ${model.name}`,
+      ...model.fields.map((field) => `  - ${field.name}: ${field.type}${field.required ? ' required' : ''}，${field.description}`),
+    ]),
+    '',
+    '### API',
+    '',
+    ...tech.apis.map((api) => `- ${api.method} ${api.path}：${api.description}${api.request ? `；请求：${api.request}` : ''}${api.response ? `；响应：${api.response}` : ''}`),
+  ];
+}
+
+function formatAcceptance(acceptance: AcceptanceDoc) {
+  return [
+    '### 功能验收',
+    '',
+    ...acceptance.featureCases.flatMap((group) => [
+      `- ${group.featureId}`,
+      ...group.cases.map((item) => `  - ${item.id} [${item.priority}] ${item.scenario}: Given ${item.given}; When ${item.when}; Then ${item.then}${item.boundary ? `; Boundary ${item.boundary}` : ''}`),
+    ]),
+    '',
+    '### 发布检查',
+    '',
+    ...formatList(acceptance.releaseChecklist),
+  ];
+}
+
+function formatTaskPlan(taskPlan: TaskPlanDoc) {
+  return taskPlan.tasks.map((task) => `- ${task.id} ${task.title}：${task.description}；依赖：${task.dependsOn.join('、') || '无'}；验收引用：${task.acceptanceRefs.join('、') || '无'}`);
+}
+
+function formatRisks(risks: RiskRecord[]) {
+  if (!risks.length) return ['暂无风险记录'];
+  const unique = new Map<string, RiskRecord>();
+  risks.forEach((risk) => unique.set(risk.id, risk));
+  return [...unique.values()].map((risk) => `- [${risk.impact}] ${risk.id} ${risk.risk}；缓解：${risk.mitigation}`);
+}
+
+function formatQualityMarkdown(report: QualityReport) {
+  return [
+    `得分：${report.score}/100`,
+    '',
+    '### 阻断项',
+    '',
+    ...formatList(report.blockers),
+    '',
+    '### 提醒',
+    '',
+    ...formatList(report.warnings),
+    '',
+    '### 已通过',
+    '',
+    ...formatList(report.passedChecks),
+    '',
+    '### 下一步',
+    '',
+    ...formatList(report.nextActions),
+  ];
+}
+
+function formatList(items: string[], indent = 0) {
+  const prefix = `${' '.repeat(indent)}- `;
+  return items.length ? items.map((item) => `${prefix}${item}`) : [`${prefix}暂无`];
 }
 
 function escapeHtml(value: string) {

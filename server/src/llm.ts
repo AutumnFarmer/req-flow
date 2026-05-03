@@ -164,6 +164,11 @@ const llmTurnSchema = z.object({
   suggestedQuestions: z.array(z.string()).default([]),
 });
 
+const llmAdviceSchema = z.object({
+  message: z.string().min(1),
+  suggestedQuestions: z.array(z.string()).default([]),
+});
+
 type LLMPlan = {
   type: ChangeProposal['type'];
   summary: string;
@@ -173,6 +178,14 @@ type LLMPlan = {
 };
 
 const LOCAL_COMMANDS = new Set(['review', 'quality', 'freeze', 'reset']);
+const MAX_REPAIR_CONTENT_LENGTH = 6000;
+
+class LLMStructuredOutputError extends Error {
+  constructor(message: string, readonly rawContent?: string) {
+    super(message);
+    this.name = 'LLMStructuredOutputError';
+  }
+}
 
 export function shouldUseLocalCommand(command?: string): boolean {
   return Boolean(command && LOCAL_COMMANDS.has(command));
@@ -185,6 +198,10 @@ export async function handleLLMAssistantTurn(
 ): Promise<AssistantTurnResult> {
   if (!hasLLMConfig()) {
     throw new Error('LLM 未配置：请在 server/.env 配置 OPENAI_API_KEY、OPENAI_BASE_URL 和 OPENAI_MODEL');
+  }
+
+  if (command === 'advise') {
+    return requestDecisionAdvice(session, message);
   }
 
   const plan = createPlan(session, command);
@@ -219,6 +236,33 @@ export async function handleLLMAssistantTurn(
     proposal,
     qualityReport: null,
     recommendedAction: 'accept_proposal',
+  };
+}
+
+async function requestDecisionAdvice(session: Session, message: string): Promise<AssistantTurnResult> {
+  const content = await requestCompletionContent([
+    {
+      role: 'system',
+      content: [
+        '你是 ReqFlow 的决策顾问。',
+        '你的任务是帮助没有产品、技术或架构经验的用户理解当前需求状态并做选择。',
+        '你不能生成或修改正式文档，不能创建变更提案，只能给建议。',
+        '必须用非专家能理解的语言说明默认建议、理由、取舍、风险和下一步。',
+        '必须只返回 JSON 对象。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: buildAdvicePrompt(session, message),
+    },
+  ]);
+  const parsed = parseAdvice(content);
+  return {
+    message: parsed.message,
+    suggestedQuestions: parsed.suggestedQuestions,
+    proposal: null,
+    qualityReport: null,
+    recommendedAction: 'answer_questions',
   };
 }
 
@@ -273,34 +317,122 @@ function createPlan(session: Session, command?: string): LLMPlan | null {
 }
 
 async function requestStructuredTurn(session: Session, message: string, command: string | undefined, plan: LLMPlan) {
+  const messages = [
+    {
+      role: 'system' as const,
+      content: SYSTEM_PROMPT,
+    },
+    {
+      role: 'user' as const,
+      content: buildUserPrompt(session, message, command, plan),
+    },
+  ];
+
+  const content = await requestCompletionContent(messages);
+  try {
+    return parseAndValidateStructuredTurn(content, plan);
+  } catch (err: any) {
+    if (!(err instanceof LLMStructuredOutputError)) {
+      throw err;
+    }
+
+    const repairedContent = await requestCompletionContent([
+      ...messages,
+      {
+        role: 'assistant' as const,
+        content: trimForRepair(content),
+      },
+      {
+        role: 'user' as const,
+        content: buildRepairPrompt(err.message, plan),
+      },
+    ]);
+
+    try {
+      return parseAndValidateStructuredTurn(repairedContent, plan);
+    } catch (repairErr: any) {
+      const detail = repairErr instanceof Error ? repairErr.message : String(repairErr);
+      throw new Error(`LLM 返回结构不合格，已自动修复一次但仍失败：${detail}；provider=${getProviderLabel()}`);
+    }
+  }
+}
+
+async function requestCompletionContent(messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>) {
   const completion = await getOpenAIClient().chat.completions.create({
     model: getModel(),
     temperature: 0.2,
     response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content: SYSTEM_PROMPT,
-      },
-      {
-        role: 'user',
-        content: buildUserPrompt(session, message, command, plan),
-      },
-    ],
+    messages,
   });
 
   const content = completion.choices[0]?.message?.content;
   if (!content) {
     throw new Error(`LLM 没有返回内容：${getProviderLabel()}`);
   }
+  return content;
+}
 
-  const json = parseJsonObject(content);
+export function parseStructuredTurn(content: string) {
+  let json: unknown;
+  try {
+    json = parseJsonObject(content);
+  } catch (err: any) {
+    throw new LLMStructuredOutputError(err.message || 'LLM 返回内容不是有效 JSON', content);
+  }
   const result = llmTurnSchema.safeParse(json);
   if (!result.success) {
     const issue = result.error.issues[0];
-    throw new Error(`LLM 返回结构不合格：${issue.path.join('.') || 'root'} ${issue.message}`);
+    throw new LLMStructuredOutputError(`LLM 返回结构不合格：${issue.path.join('.') || 'root'} ${issue.message}`, content);
   }
   return result.data;
+}
+
+export function parseAdvice(content: string) {
+  let json: unknown;
+  try {
+    json = parseJsonObject(content);
+  } catch (err: any) {
+    throw new LLMStructuredOutputError(err.message || 'LLM 返回建议不是有效 JSON', content);
+  }
+  const result = llmAdviceSchema.safeParse(json);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    throw new LLMStructuredOutputError(`LLM 返回建议结构不合格：${issue.path.join('.') || 'root'} ${issue.message}`, content);
+  }
+  return result.data;
+}
+
+function parseAndValidateStructuredTurn(content: string, plan: LLMPlan) {
+  const parsed = parseStructuredTurn(content);
+  const proposedDocuments = parsed.proposal.proposedDocuments as Record<string, unknown>;
+  const missing = plan.requiredDocs.filter((target) => proposedDocuments[target] === undefined);
+  if (missing.length > 0) {
+    throw new LLMStructuredOutputError(`LLM 返回缺少必需文档：${missing.join('、')}`, content);
+  }
+  return parsed;
+}
+
+function buildRepairPrompt(errorMessage: string, plan: LLMPlan) {
+  return [
+    '上一次回复没有通过 ReqFlow 的结构化校验。',
+    `错误：${errorMessage}`,
+    '',
+    '请基于同一会话状态重新输出一个完整 JSON 对象。',
+    '不要解释，不要 Markdown，不要省略字段。',
+    `必须包含这些 proposedDocuments：${plan.requiredDocs.join('、')}`,
+    '',
+    '顶层结构必须符合：',
+    JSON.stringify(OUTPUT_CONTRACT, null, 2),
+    '',
+    '文档字段模板如下：',
+    JSON.stringify(DOCUMENT_SHAPES, null, 2),
+  ].join('\n');
+}
+
+function trimForRepair(content: string) {
+  return content.length > MAX_REPAIR_CONTENT_LENGTH
+    ? `${content.slice(0, MAX_REPAIR_CONTENT_LENGTH)}\n...已截断`
+    : content;
 }
 
 function buildUserPrompt(session: Session, message: string, command: string | undefined, plan: LLMPlan) {
@@ -356,11 +488,53 @@ function buildUserPrompt(session: Session, message: string, command: string | un
   ].join('\n');
 }
 
+function buildAdvicePrompt(session: Session, message: string) {
+  const state = {
+    userQuestion: message,
+    stage: session.stage,
+    currentVersion: session.currentVersion,
+    originalIdea: session.originalIdea,
+    pendingProposal: session.pendingProposal ? {
+      type: session.pendingProposal.type,
+      summary: session.pendingProposal.summary,
+      reason: session.pendingProposal.reason,
+      impactTargets: session.pendingProposal.impactTargets,
+      impactLevel: session.pendingProposal.impactLevel,
+      conflicts: session.pendingProposal.conflicts,
+      proposedChanges: session.pendingProposal.proposedChanges,
+    } : null,
+    currentDocuments: {
+      constitution: session.constitution,
+      requirement: session.requirement,
+      tech: session.tech,
+      acceptance: session.acceptance,
+      taskPlan: session.taskPlan,
+      openQuestions: session.openQuestions,
+      risks: session.risks,
+      qualityReport: session.qualityReport,
+    },
+  };
+
+  return [
+    '请基于下面的 ReqFlow 会话状态给用户决策建议。',
+    '只返回 JSON，不要 Markdown，不要输出 JSON 之外的内容。',
+    '',
+    `会话状态：${JSON.stringify(state)}`,
+    '',
+    '输出结构：',
+    JSON.stringify({
+      message: '给用户看的建议。要包含：默认建议、为什么、取舍、风险、下一步。用非专家能理解的中文。',
+      suggestedQuestions: ['用户可以继续追问的问题，可为空数组'],
+    }, null, 2),
+  ].join('\n');
+}
+
 const SYSTEM_PROMPT = [
   '你是 ReqFlow 的真实 LLM 需求架构师。',
   '你的职责是把用户想法转成结构化需求资产，但不能直接应用正式变更。',
   '每次输出都必须是一份可由系统确认的变更提案。',
   '你要遵守受控自循环：先提案、用户接受后才变更；文档之间必须一致；冻结前要能被质量闸门检查。',
+  '不要假设用户具备产品、技术或架构能力；需要用非专家能理解的语言说明默认建议、关键取舍、风险和下一步。',
 ].join('\n');
 
 const OUTPUT_CONTRACT = {

@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { acceptProposal } from '../api';
+import { acceptProposal, exportMarkdown, getSession } from '../api';
 import { useAppStore } from '../store';
 import StageIndicator from './StageIndicator';
 import ChatPanel from './ChatPanel';
 import DocPreview from './DocPreview';
 import ProposalDrawer from './ProposalDrawer';
+import ActorControl from './ActorControl';
 
 export default function Workspace() {
   const session = useAppStore((s) => s.session);
   const setSession = useAppStore((s) => s.setSession);
   const setError = useAppStore((s) => s.setError);
   const [accepting, setAccepting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   if (!session) return null;
 
@@ -24,6 +26,29 @@ export default function Workspace() {
       setError(err.message);
     } finally {
       setAccepting(false);
+    }
+  };
+
+  const handleExportMarkdown = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const markdown = await exportMarkdown(session.id);
+      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${safeFileName(session.title || 'reqflow-spec')}-v${session.currentVersion}.md`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      const updated = await getSession(session.id);
+      setSession(updated);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -54,6 +79,14 @@ export default function Workspace() {
           <span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-gray-400">
             质量 {session.qualityReport?.score ?? 0}
           </span>
+          <button
+            onClick={handleExportMarkdown}
+            disabled={exporting}
+            className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-cyan-400/30 hover:text-cyan-100 disabled:cursor-wait disabled:opacity-60"
+          >
+            {exporting ? '导出中...' : '导出规格包'}
+          </button>
+          <ActorControl compact />
           <StageIndicator />
           <span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-gray-400">
             v{session.currentVersion}
@@ -73,4 +106,12 @@ export default function Workspace() {
       </div>
     </div>
   );
+}
+
+function safeFileName(value: string) {
+  return value
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, '-')
+    .slice(0, 80) || 'reqflow-spec';
 }

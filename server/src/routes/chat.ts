@@ -8,6 +8,7 @@ import {
   persist,
 } from '../store.js';
 import { handleLLMAssistantTurn, shouldUseLocalCommand } from '../llm.js';
+import { type AccessRole, actorFromRequest, canAccessWorkspace, canUseRole, roleForbiddenMessage } from '../access.js';
 
 export const chatRouter = Router();
 
@@ -28,6 +29,10 @@ async function streamText(res: any, content: string) {
   }
 }
 
+function minRoleForCommand(command?: string): AccessRole {
+  return command === 'review' || command === 'quality' || command === 'advise' ? 'reviewer' : 'editor';
+}
+
 chatRouter.post('/:id/stream', async (req, res) => {
   const parsed = chatBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -40,8 +45,17 @@ chatRouter.post('/:id/stream', async (req, res) => {
     res.status(404).json({ error: '会话不存在' });
     return;
   }
+  if (!canAccessWorkspace(session, req)) {
+    res.status(403).json({ error: '无权访问该工作区会话' });
+    return;
+  }
 
   const { message, command } = parsed.data;
+  const minRole = minRoleForCommand(command);
+  if (!canUseRole(req, minRole)) {
+    res.status(403).json({ error: roleForbiddenMessage(minRole) });
+    return;
+  }
   const normalizedMessage = message.trim() || command || '';
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -83,10 +97,18 @@ chatRouter.post('/:id/prototype', async (req, res) => {
     res.status(404).json({ error: '会话不存在' });
     return;
   }
+  if (!canAccessWorkspace(session, req)) {
+    res.status(403).json({ error: '无权访问该工作区会话' });
+    return;
+  }
+  if (!canUseRole(req, 'editor')) {
+    res.status(403).json({ error: roleForbiddenMessage('editor') });
+    return;
+  }
   if (!session.requirement) {
     res.status(400).json({ error: '请先接受一版需求文档提案' });
     return;
   }
-  const prototype = generatePrototype(session);
+  const prototype = generatePrototype(session, actorFromRequest(req));
   res.json({ html: prototype.html, prototype, session });
 });

@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:llm": "RUN_LLM_TESTS=1 node --import tsx --test tests/llm.integration.test.ts",
+    "eval:llm": "tsx scripts/run-llm-evals.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {
@@ -12,13 +15,12 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "openai": "^4.73.0",
-    "uuid": "^9.0.1",
+    "uuid": "^14.0.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
-    "@types/uuid": "^9.0.8",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }

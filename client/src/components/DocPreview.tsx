@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { acceptProposal, DOC_TAB_LABELS, generatePrototype } from '../api';
 import { useAppStore } from '../store';
-import type { DocTab } from '../types';
+import type { DocTab, ImpactTarget } from '../types';
 import AcceptanceView from './AcceptanceView';
+import AuditView from './AuditView';
 import ConstitutionView from './ConstitutionView';
 import PrototypeView from './PrototypeView';
 import RequirementView from './RequirementView';
+import ReviewView from './ReviewView';
 import TaskPlanView from './TaskPlanView';
 import TechView from './TechView';
+import TraceabilityView from './TraceabilityView';
 
 export default function DocPreview() {
   const session = useAppStore((s) => s.session);
@@ -25,10 +28,13 @@ export default function DocPreview() {
     switch (tab) {
       case 'constitution': return proposedDocs?.constitution || session.constitution;
       case 'requirement': return proposedDocs?.requirement || session.requirement;
+      case 'traceability': return session.requirement;
       case 'tech': return proposedDocs?.tech || session.tech;
       case 'acceptance': return proposedDocs?.acceptance || session.acceptance;
       case 'prototype': return proposedDocs?.prototype || session.prototype;
       case 'taskPlan': return proposedDocs?.taskPlan || session.taskPlan;
+      case 'review': return session.reviews;
+      case 'audit': return session.auditEvents;
     }
   };
 
@@ -36,10 +42,13 @@ export default function DocPreview() {
     switch (tab) {
       case 'constitution': return !!proposedDocs?.constitution;
       case 'requirement': return !!proposedDocs?.requirement;
+      case 'traceability': return false;
       case 'tech': return !!proposedDocs?.tech;
       case 'acceptance': return !!proposedDocs?.acceptance;
       case 'prototype': return !!proposedDocs?.prototype;
       case 'taskPlan': return !!proposedDocs?.taskPlan;
+      case 'review': return false;
+      case 'audit': return false;
     }
   };
 
@@ -50,7 +59,7 @@ export default function DocPreview() {
 
   const tabs = useMemo<DocTab[]>(() => {
     const generated: DocTab[] = ['constitution'];
-    const candidates: DocTab[] = ['requirement', 'tech', 'acceptance', 'prototype', 'taskPlan'];
+    const candidates: DocTab[] = ['requirement', 'traceability', 'acceptance', 'taskPlan', 'tech', 'prototype', 'review', 'audit'];
     candidates.forEach((tab) => {
       if (hasContent(tab)) generated.push(tab);
     });
@@ -71,7 +80,7 @@ export default function DocPreview() {
     const proposal = session.pendingProposal;
     if (!proposal) return;
 
-    const preferred = (['requirement', 'tech', 'acceptance', 'taskPlan', 'prototype', 'constitution'] as DocTab[])
+    const preferred = (['requirement', 'tech', 'acceptance', 'taskPlan', 'prototype', 'constitution'] as ImpactTarget[])
       .find((tab) => proposal.impactTargets.includes(tab) && tabs.includes(tab));
     if (preferred && docTab !== preferred) {
       setDocTab(preferred);
@@ -112,6 +121,15 @@ export default function DocPreview() {
         return doc ? <ConstitutionView doc={doc as any} /> : null;
       case 'requirement':
         return doc ? <RequirementView doc={doc as any} /> : null;
+      case 'traceability':
+        return (
+          <TraceabilityView
+            requirement={(proposedDocs?.requirement || session.requirement) as any}
+            acceptance={(proposedDocs?.acceptance || session.acceptance) as any}
+            taskPlan={(proposedDocs?.taskPlan || session.taskPlan) as any}
+            tech={(proposedDocs?.tech || session.tech) as any}
+          />
+        );
       case 'tech':
         return doc ? <TechView doc={doc as any} /> : null;
       case 'acceptance':
@@ -127,6 +145,10 @@ export default function DocPreview() {
         );
       case 'taskPlan':
         return doc ? <TaskPlanView doc={doc as any} /> : null;
+      case 'review':
+        return <ReviewView reviews={session.reviews || []} />;
+      case 'audit':
+        return <AuditView events={session.auditEvents || []} />;
     }
   };
 

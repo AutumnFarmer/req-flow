@@ -1,0 +1,29 @@
+services:
+  reqflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${REQFLOW_PORT:-3002}:3002"
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      CLIENT_DIST_DIR: /app/client-dist
+      REQFLOW_DATA_DIR: /data
+      REQFLOW_AUTH_MODE: "${REQFLOW_AUTH_MODE:-local}"
+      REQFLOW_REQUEST_LOGS: "${REQFLOW_REQUEST_LOGS:-1}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:?Set OPENAI_API_KEY in your shell or .env}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o}"
+    volumes:
+      - reqflow-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  reqflow-data:

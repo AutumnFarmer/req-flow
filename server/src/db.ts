@@ -67,6 +67,15 @@ export function getSession(id: string): Session | undefined {
   return JSON.parse(row.payload) as Session;
 }
 
+export function listSessions(): Session[] {
+  const rows = db.prepare(`
+    SELECT payload FROM sessions
+    ORDER BY updated_at DESC
+  `).all() as Array<{ payload: string }>;
+
+  return rows.map((row) => JSON.parse(row.payload) as Session);
+}
+
 export function saveSnapshot(sessionId: string, snapshot: VersionSnapshot) {
   db.prepare(`
     INSERT INTO snapshots (session_id, version, summary, proposal_id, payload, created_at)
@@ -104,4 +113,22 @@ export function getSnapshot(sessionId: string, version: number): VersionSnapshot
 
   if (!row) return undefined;
   return JSON.parse(row.payload) as VersionSnapshot;
+}
+
+export function getStorageStatus() {
+  try {
+    db.prepare('SELECT 1 AS ok').get();
+    fs.accessSync(dataDir, fs.constants.W_OK);
+    return {
+      ok: true,
+      dataDir,
+      error: null,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      dataDir,
+      error: err.message || 'storage check failed',
+    };
+  }
 }

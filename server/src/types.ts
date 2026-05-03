@@ -1,9 +1,21 @@
 export type Stage = 'clarify' | 'draft' | 'review' | 'frozen';
 export type RuntimeState = 'idle' | 'thinking' | 'proposal_pending' | 'applying' | 'checking' | 'blocked';
-export type DocTab = 'constitution' | 'requirement' | 'tech' | 'acceptance' | 'prototype' | 'taskPlan';
+export type DocTab = 'constitution' | 'requirement' | 'traceability' | 'tech' | 'acceptance' | 'prototype' | 'taskPlan' | 'audit';
 export type MessageRole = 'user' | 'assistant' | 'system';
 export type ChangeType = 'fix' | 'idea' | 'conflict' | 'reset' | 'freeze' | 'generate';
 export type ImpactTarget = 'constitution' | 'requirement' | 'tech' | 'acceptance' | 'prototype' | 'taskPlan';
+export type ReviewStatus = 'approved' | 'rejected';
+export type AuditAction =
+  | 'session.created'
+  | 'stage.changed'
+  | 'stage.blocked'
+  | 'quality.checked'
+  | 'proposal.accepted'
+  | 'proposal.rejected'
+  | 'review.submitted'
+  | 'snapshot.rolled_back'
+  | 'prototype.generated'
+  | 'spec.exported';
 
 export interface ChatMessage {
   role: MessageRole;
@@ -152,6 +164,25 @@ export interface RiskRecord {
   mitigation: string;
 }
 
+export interface AuditEvent {
+  id: string;
+  action: AuditAction;
+  actor: string;
+  summary: string;
+  metadata: Record<string, string | number | boolean | null>;
+  createdAt: number;
+}
+
+export interface ReviewRecord {
+  id: string;
+  version: number;
+  status: ReviewStatus;
+  actor: string;
+  role: string;
+  comment: string;
+  createdAt: number;
+}
+
 export interface ChangeProposal {
   id: string;
   type: ChangeType;
@@ -197,6 +228,7 @@ export interface VersionSnapshot {
 
 export interface Session {
   id: string;
+  workspaceId: string;
   title: string;
   originalIdea: string;
   stage: Stage;
@@ -215,8 +247,24 @@ export interface Session {
   qualityReport: QualityReport | null;
   messages: ChatMessage[];
   snapshots: VersionSnapshot[];
+  auditEvents: AuditEvent[];
+  reviews: ReviewRecord[];
   createdAt: number;
   updatedAt: number;
+}
+
+export interface SessionSummary {
+  id: string;
+  workspaceId: string;
+  title: string;
+  originalIdea: string;
+  stage: Stage;
+  runtimeState: RuntimeState;
+  currentVersion: number;
+  qualityScore: number | null;
+  pendingProposal: boolean;
+  updatedAt: number;
+  createdAt: number;
 }
 
 export interface AssistantTurnResult {

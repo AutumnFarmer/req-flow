@@ -1,0 +1,84 @@
+name: LLM Website Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: OpenAI-compatible model name
+        required: false
+        default: deepseek-v4-flash
+      base_url:
+        description: OpenAI-compatible base URL
+        required: false
+        default: https://api.deepseek.com
+
+jobs:
+  website-smoke:
+    name: Real LLM Website Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ inputs.base_url }}
+      OPENAI_MODEL: ${{ inputs.model }}
+      REQFLOW_REQUEST_LOGS: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Validate secret
+        run: test -n "$OPENAI_API_KEY"
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Install browser
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+
+      - name: Start server
+        working-directory: server
+        run: |
+          npm run dev > /tmp/reqflow-server.log 2>&1 &
+          echo $! > /tmp/reqflow-server.pid
+
+      - name: Start client
+        working-directory: client
+        run: |
+          npm run dev -- --host 0.0.0.0 > /tmp/reqflow-client.log 2>&1 &
+          echo $! > /tmp/reqflow-client.pid
+
+      - name: Wait for services
+        run: |
+          timeout 60 bash -c 'until curl -fsS http://127.0.0.1:3002/api/ready; do sleep 2; done'
+          timeout 60 bash -c 'until curl -fsS http://127.0.0.1:5173 >/dev/null; do sleep 2; done'
+
+      - name: Run website smoke test
+        working-directory: client
+        run: npm run test:e2e
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-smoke-logs
+          path: |
+            /tmp/reqflow-server.log
+            /tmp/reqflow-client.log
+            client/test-results
+            client/playwright-report
+          if-no-files-found: ignore

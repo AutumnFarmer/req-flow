@@ -1,16 +1,39 @@
-import { useState } from 'react';
-import { createSession, getSession, streamChat } from '../api';
+import { useEffect, useState } from 'react';
+import { createSession, getSession, listSessions, streamChat } from '../api';
 import { useAppStore } from '../store';
+import type { SessionSummary } from '../types';
+import ActorControl from './ActorControl';
 
 export default function Welcome() {
   const [idea, setIdea] = useState('');
   const [loading, setLoading] = useState(false);
+  const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
+  const workspaceId = useAppStore((s) => s.workspaceId);
   const setSession = useAppStore((s) => s.setSession);
   const setError = useAppStore((s) => s.setError);
   const setIsStreaming = useAppStore((s) => s.setIsStreaming);
   const setStreamingContent = useAppStore((s) => s.setStreamingContent);
   const appendStreamingContent = useAppStore((s) => s.appendStreamingContent);
   const addMessage = useAppStore((s) => s.addMessage);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingRecent(true);
+    listSessions()
+      .then((sessions) => {
+        if (!cancelled) setRecentSessions(sessions);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentSessions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRecent(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId]);
 
   const handleStart = async () => {
     if (!idea.trim() || loading) return;
@@ -50,6 +73,19 @@ export default function Welcome() {
     }
   };
 
+  const handleOpenSession = async (sessionId: string) => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setSession(await getSession(sessionId));
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex-1 bg-[#080b10] text-gray-100">
       <header className="h-14 border-b border-white/10 px-8 flex items-center justify-between">
@@ -62,7 +98,10 @@ export default function Welcome() {
             <div className="text-[11px] text-gray-500">Controlled requirement loop</div>
           </div>
         </div>
-        <div className="text-xs text-gray-500">v1.0 本地工作台</div>
+        <div className="flex items-center gap-3">
+          <ActorControl compact />
+          <div className="text-xs text-gray-500">v1.0 本地工作台</div>
+        </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-8 py-12 grid grid-cols-[minmax(0,1.15fr)_360px] gap-8 max-lg:grid-cols-1 max-sm:px-4 max-sm:py-6">
@@ -140,6 +179,45 @@ export default function Welcome() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-gray-200">最近会话</h2>
+              <span className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-gray-500">
+                {workspaceId}
+              </span>
+            </div>
+            {loadingRecent ? (
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3 text-xs text-gray-500">加载中...</div>
+            ) : recentSessions.length === 0 ? (
+              <div className="rounded-md border border-dashed border-white/10 p-3 text-xs leading-5 text-gray-500">
+                当前工作区暂无历史会话。
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentSessions.slice(0, 5).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleOpenSession(item.id)}
+                    className="block w-full rounded-md border border-white/10 bg-white/[0.03] p-3 text-left transition-all hover:border-cyan-400/30 hover:bg-white/[0.05]"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 truncate text-xs font-medium text-gray-200">{item.title}</div>
+                      <span className="shrink-0 rounded bg-[#080b10] px-1.5 py-0.5 text-[10px] text-gray-500">
+                        v{item.currentVersion}
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate text-[11px] text-gray-500">{item.originalIdea}</div>
+                    <div className="mt-2 flex items-center gap-2 text-[10px] text-gray-600">
+                      <span>{item.stage}</span>
+                      {item.qualityScore !== null && <span>质量 {item.qualityScore}</span>}
+                      {item.pendingProposal && <span className="text-amber-300/80">待确认</span>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </aside>
       </main>

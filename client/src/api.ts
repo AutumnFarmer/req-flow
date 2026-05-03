@@ -1,6 +1,30 @@
-import type { DocTab, QualityReport, Session, Stage } from './types';
+import type { AuditEvent, DocTab, QualityReport, ReviewStatus, Session, SessionSummary, Stage } from './types';
 
 const API = '/api';
+
+function getActor() {
+  return window.localStorage.getItem('reqflow:actor') || 'local-user';
+}
+
+function getWorkspace() {
+  return window.localStorage.getItem('reqflow:workspace') || 'default';
+}
+
+function getRole() {
+  return window.localStorage.getItem('reqflow:role') || 'admin';
+}
+
+function requestHeaders(): HeadersInit {
+  return {
+    'x-reqflow-actor': getActor(),
+    'x-reqflow-workspace': getWorkspace(),
+    'x-reqflow-role': getRole(),
+  };
+}
+
+function jsonHeaders(): HeadersInit {
+  return { 'Content-Type': 'application/json', ...requestHeaders() };
+}
 
 async function readJson<T>(res: Response, fallback: string): Promise<T> {
   if (!res.ok) {
@@ -13,47 +37,59 @@ async function readJson<T>(res: Response, fallback: string): Promise<T> {
 export async function createSession(idea: string): Promise<Session> {
   const res = await fetch(`${API}/session`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jsonHeaders(),
     body: JSON.stringify({ idea }),
   });
   const data = await readJson<{ session: Session }>(res, '创建会话失败');
   return data.session;
 }
 
+export async function listSessions(): Promise<SessionSummary[]> {
+  const res = await fetch(`${API}/session`, { headers: requestHeaders() });
+  const data = await readJson<{ sessions: SessionSummary[] }>(res, '获取会话列表失败');
+  return data.sessions;
+}
+
 export async function getSession(id: string): Promise<Session> {
-  const res = await fetch(`${API}/session/${id}`);
+  const res = await fetch(`${API}/session/${id}`, { headers: requestHeaders() });
   return readJson<Session>(res, '获取会话失败');
 }
 
 export async function updateStage(id: string, stage: Stage): Promise<Session> {
   const res = await fetch(`${API}/session/${id}/stage`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jsonHeaders(),
     body: JSON.stringify({ stage }),
   });
   return readJson<Session>(res, '更新阶段失败');
 }
 
 export async function runQuality(id: string): Promise<Session> {
-  const res = await fetch(`${API}/session/${id}/quality`, { method: 'POST' });
+  const res = await fetch(`${API}/session/${id}/quality`, { method: 'POST', headers: requestHeaders() });
   const data = await readJson<{ session: Session }>(res, '质量检查失败');
   return data.session;
 }
 
 export async function acceptProposal(id: string, proposalId: string): Promise<Session> {
-  const res = await fetch(`${API}/session/${id}/proposals/${proposalId}/accept`, { method: 'POST' });
+  const res = await fetch(`${API}/session/${id}/proposals/${proposalId}/accept`, {
+    method: 'POST',
+    headers: requestHeaders(),
+  });
   return readJson<Session>(res, '接受提案失败');
 }
 
 export async function rejectProposal(id: string, proposalId: string): Promise<Session> {
-  const res = await fetch(`${API}/session/${id}/proposals/${proposalId}/reject`, { method: 'POST' });
+  const res = await fetch(`${API}/session/${id}/proposals/${proposalId}/reject`, {
+    method: 'POST',
+    headers: requestHeaders(),
+  });
   return readJson<Session>(res, '拒绝提案失败');
 }
 
 export async function rollbackSession(id: string, version: number): Promise<Session> {
   const res = await fetch(`${API}/session/${id}/rollback`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jsonHeaders(),
     body: JSON.stringify({ version }),
   });
   return readJson<Session>(res, '回滚失败');
@@ -62,14 +98,33 @@ export async function rollbackSession(id: string, version: number): Promise<Sess
 export async function generatePrototype(id: string): Promise<Session> {
   const res = await fetch(`${API}/chat/${id}/prototype`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jsonHeaders(),
   });
   const data = await readJson<{ session: Session }>(res, '生成原型失败');
   return data.session;
 }
 
+export async function getAuditEvents(id: string): Promise<AuditEvent[]> {
+  const res = await fetch(`${API}/session/${id}/audit`, { headers: requestHeaders() });
+  return readJson<AuditEvent[]>(res, '获取审计日志失败');
+}
+
+export async function submitReview(
+  id: string,
+  status: ReviewStatus,
+  comment: string,
+  role: string,
+): Promise<Session> {
+  const res = await fetch(`${API}/session/${id}/reviews`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ status, comment, role }),
+  });
+  return readJson<Session>(res, '提交评审失败');
+}
+
 export async function exportMarkdown(id: string): Promise<string> {
-  const res = await fetch(`${API}/session/${id}/export/markdown`);
+  const res = await fetch(`${API}/session/${id}/export/markdown`, { headers: requestHeaders() });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || '导出失败');
@@ -90,7 +145,7 @@ export function streamChat(
 
   fetch(`${API}/chat/${id}/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jsonHeaders(),
     body: JSON.stringify({ message, command }),
     signal: controller.signal,
   })
@@ -161,8 +216,11 @@ export const STAGE_COLORS: Record<Stage, string> = {
 export const DOC_TAB_LABELS: Record<DocTab, string> = {
   constitution: '需求宪法',
   requirement: '需求文档',
+  traceability: '追溯矩阵',
   tech: '技术方案',
   acceptance: '验收标准',
   prototype: '原型预览',
   taskPlan: '任务拆解',
+  review: '评审签核',
+  audit: '审计日志',
 };
